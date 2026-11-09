@@ -9,6 +9,7 @@ st.set_page_config(page_title="MoodFlix", page_icon="🎬", layout="wide")
 inject_css()
 
 PAGES = ["Home", "Discover", "Search", "Watchlist", "Insights", "About"]
+TEAM = ["Khon Sotheara", "Cheang Youpheng", "Chea Sela", "Khann Udomvirak"]
 
 
 def go_to(page_name):
@@ -282,8 +283,8 @@ elif page == "About":
     )
 
     st.subheader("Team")
-    st.write("- Khon Sotheara")
-    st.write("- Add your teammates here")
+    for member in TEAM:
+        st.write(f"- {member}")
 
     st.subheader("Data")
     st.write(

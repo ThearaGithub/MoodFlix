@@ -15,6 +15,10 @@ MoodFlix learns from the movies you like, blends content similarity, rating qual
 - Model insights and catalog statistics
 - Session-only preferences (no accounts, no tracking)
 
+## Preview
+
+![MoodFlix demo](assets/preview.gif)
+
 ## Tech Stack
 
 - Python
@@ -30,6 +34,11 @@ MoodFlix/
 ├── app.py
 ├── requirements.txt
 ├── README.md
+├── assets/
+│   ├── preview.gif
+│   ├── home.png
+│   ├── discover.png
+│   └── insights.png
 ├── data/
 │   ├── movies.csv
 │   ├── ratings.csv
@@ -58,7 +67,7 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-Download the MovieLens data:
+The MovieLens data is included. To re-download it:
 
 ```bash
 python scripts/download_data.py
@@ -97,7 +106,9 @@ https://grouplens.org/datasets/movielens/
 ## Team
 
 - Khon Sotheara
-- Add your teammates here
+- Cheang Youpheng
+- Chea Sela
+- Khann Udomvirak
 
 ## Roadmap
 
