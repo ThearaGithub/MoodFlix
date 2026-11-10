@@ -34,6 +34,8 @@ MoodFlix/
 ├── app.py
 ├── requirements.txt
 ├── README.md
+├── .streamlit/
+│   └── config.toml
 ├── assets/
 │   ├── preview.gif
 │   ├── home.png

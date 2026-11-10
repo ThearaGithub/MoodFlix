@@ -10,6 +10,10 @@ def inject_css():
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
 
+        html, body, .stApp, [data-testid="stSidebar"], button, input, textarea, select {
+            font-family: "Outfit", "Segoe UI", system-ui, sans-serif;
+        }
+
         .stApp {
             background:
                 radial-gradient(1100px 620px at 8% -10%, rgba(124,92,255,.28), transparent 60%),
@@ -22,6 +26,27 @@ def inject_css():
         [data-testid="stSidebar"] {
             background: linear-gradient(180deg, #0b1220, #070b12);
             border-right: 1px solid rgba(255,255,255,.08);
+        }
+
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] label {
+            color: #dbe7ff;
+        }
+
+        [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMarkdownContainer"] li {
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stRadio"] p {
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+            color: #9fb2cf;
+            font-size: 13px;
         }
 
         h1 {
@@ -44,7 +69,7 @@ def inject_css():
 
         .mf-kicker {
             color: #67e8f9;
-            font-size: .72rem;
+            font-size: .78rem;
             font-weight: 700;
             letter-spacing: .2em;
             text-transform: uppercase;
@@ -59,7 +84,8 @@ def inject_css():
         }
 
         .mf-meta {
-            color: #a9b8d0;
+            color: #c3d2ea;
+            font-size: 1rem;
             font-weight: 500;
             margin-bottom: 14px;
         }
@@ -71,21 +97,23 @@ def inject_css():
         }
 
         .mf-rating span {
-            color: #7f93b3;
-            font-size: .9rem;
+            color: #a9b8d0;
+            font-size: .95rem;
             font-weight: 400;
         }
 
         .mf-tags {
             margin-top: 14px;
-            color: #8ea3c0;
-            font-size: .9rem;
+            color: #b9c9e5;
+            font-size: .95rem;
             font-style: italic;
+            line-height: 1.5;
         }
 
         div.stButton > button {
             background-image: linear-gradient(100deg, #7c5cff, #22d3ee);
             color: #04121f;
+            font-size: 1rem;
             font-weight: 700;
             border: none;
             border-radius: 12px;
@@ -102,6 +130,27 @@ def inject_css():
             border: 1px solid rgba(255,255,255,.09);
             border-radius: 16px;
             padding: 16px 18px;
+        }
+
+        [data-testid="stMetricLabel"] p {
+            color: #b9c9e5 !important;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        [data-testid="stMetricValue"] p {
+            color: #f4f8ff !important;
+            font-size: 34px;
+            font-weight: 700;
+        }
+
+        [data-testid="stWidgetLabel"] p {
+            color: #e6efff !important;
+            font-weight: 600;
+        }
+
+        [data-testid="stCaptionContainer"] p {
+            color: #aebdd6 !important;
         }
         </style>
         """,
