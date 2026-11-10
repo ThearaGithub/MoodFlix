@@ -67,6 +67,38 @@ def inject_css():
             box-shadow: 0 30px 70px rgba(0,0,0,.45);
         }
 
+        .mf-card-with-poster {
+            display: flex;
+            gap: 26px;
+            align-items: flex-start;
+        }
+
+        .mf-poster {
+            width: 160px;
+            min-width: 160px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,.14);
+            box-shadow: 0 18px 40px rgba(0,0,0,.45);
+            display: block;
+        }
+
+        .mf-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        @media (max-width: 700px) {
+            .mf-card-with-poster {
+                flex-direction: column;
+            }
+
+            .mf-poster {
+                width: 100%;
+                max-width: 220px;
+                min-width: 0;
+            }
+        }
+
         .mf-kicker {
             color: #67e8f9;
             font-size: .78rem;
@@ -169,14 +201,27 @@ def movie_card(movie):
     if year is not None and not pd.isna(year):
         year_text = f" · {int(year)}"
 
+    poster_url = str(movie.get("poster_url", "") or "").strip()
+    card_class = "mf-card"
+    poster_html = ""
+    if poster_url.startswith(("https://", "http://")):
+        card_class += " mf-card-with-poster"
+        poster_html = (
+            f'<img class="mf-poster" src="{escape(poster_url, quote=True)}" '
+            f'alt="{title} poster" loading="lazy">'
+        )
+
     st.markdown(
         f"""
-        <div class="mf-card">
-            <div class="mf-kicker">Now showing{year_text}</div>
-            <div class="mf-title">{title}</div>
-            <div class="mf-meta">{genres}</div>
-            <div class="mf-rating">⭐ {rating:.2f} <span>({count:,} ratings)</span></div>
-            <div class="mf-tags">{tags}</div>
+        <div class="{card_class}">
+            {poster_html}
+            <div class="mf-body">
+                <div class="mf-kicker">Now showing{year_text}</div>
+                <div class="mf-title">{title}</div>
+                <div class="mf-meta">{genres}</div>
+                <div class="mf-rating">⭐ {rating:.2f} <span>({count:,} ratings)</span></div>
+                <div class="mf-tags">{tags}</div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,

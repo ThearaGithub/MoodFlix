@@ -8,7 +8,7 @@ import certifi
 
 DATA_URL = "https://files.grouplens.org/datasets/movielens/ml-latest-small.zip"
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-FILES = ["movies.csv", "ratings.csv", "tags.csv"]
+FILES = ["movies.csv", "ratings.csv", "tags.csv", "links.csv"]
 
 
 def main():

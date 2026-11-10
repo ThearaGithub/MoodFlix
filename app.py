@@ -291,6 +291,10 @@ elif page == "About":
         "MovieLens Latest Small dataset from GroupLens Research. "
         "Ratings are used to compute movie quality and collaborative signals."
     )
+    st.caption(
+        "Poster images courtesy of TMDB. This product uses the TMDB API "
+        "but is not endorsed or certified by TMDB."
+    )
 
     st.subheader("Ethics")
     st.info(

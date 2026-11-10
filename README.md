@@ -12,6 +12,7 @@ MoodFlix learns from the movies you like, blends content similarity, rating qual
 - Collaborative filtering from MovieLens ratings
 - Search and genre filters
 - Watchlist with CSV export
+- TMDB movie posters with a graceful fallback
 - Model insights and catalog statistics
 - Session-only preferences (no accounts, no tracking)
 
@@ -35,7 +36,8 @@ MoodFlix/
 ├── requirements.txt
 ├── README.md
 ├── .streamlit/
-│   └── config.toml
+│   ├── config.toml
+│   └── secrets.toml.example
 ├── assets/
 │   ├── preview.gif
 │   ├── home.png
@@ -44,9 +46,12 @@ MoodFlix/
 ├── data/
 │   ├── movies.csv
 │   ├── ratings.csv
-│   └── tags.csv
+│   ├── tags.csv
+│   ├── links.csv
+│   └── posters.csv
 ├── scripts/
-│   └── download_data.py
+│   ├── download_data.py
+│   └── fetch_posters.py
 └── src/
     ├── data_loader.py
     ├── mood.py
@@ -73,6 +78,14 @@ The MovieLens data is included. To re-download it:
 
 ```bash
 python scripts/download_data.py
+```
+
+Poster data is optional. To generate the cached TMDB posters, copy
+`.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`, add your TMDB
+API key, and run:
+
+```bash
+python scripts/fetch_posters.py
 ```
 
 Run the app:
@@ -105,6 +118,9 @@ MovieLens Latest Small dataset from GroupLens Research:
 https://grouplens.org/datasets/movielens/
 ```
 
+Poster images courtesy of TMDB. This product uses the TMDB API but is not
+endorsed or certified by TMDB.
+
 ## Team
 
 - Khon Sotheara
@@ -115,7 +131,6 @@ https://grouplens.org/datasets/movielens/
 ## Roadmap
 
 - Optional webcam mood detection with a manual fallback
-- Movie posters through TMDB
 - User accounts and SQLite persistence
 - Precision@k and RMSE evaluation dashboard
 - Deployment

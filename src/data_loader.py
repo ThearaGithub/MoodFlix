@@ -39,6 +39,19 @@ def load_ratings():
     return pd.read_csv(path)
 
 
+@st.cache_data(show_spinner=False, ttl=300)
+def load_posters():
+    path = DATA_DIR / "posters.csv"
+    if not path.exists():
+        return pd.DataFrame(columns=["movieId", "poster_url"])
+    posters = pd.read_csv(path)
+    if "poster_url" not in posters.columns:
+        return pd.DataFrame(columns=["movieId", "poster_url"])
+    posters = posters[["movieId", "poster_url"]].dropna()
+    posters["poster_url"] = posters["poster_url"].astype(str).str.strip()
+    return posters[~posters["poster_url"].isin(["", "nan"])]
+
+
 @st.cache_data(show_spinner=False)
 def load_movie_stats():
     ratings = load_ratings()
@@ -58,4 +71,12 @@ def load_catalog():
     catalog = movies.merge(stats, on="movieId", how="left")
     catalog["avg_rating"] = catalog["avg_rating"].fillna(0.0)
     catalog["rating_count"] = catalog["rating_count"].fillna(0).astype(int)
+
+    posters = load_posters()
+    if not posters.empty:
+        catalog = catalog.merge(posters, on="movieId", how="left")
+    else:
+        catalog["poster_url"] = ""
+    catalog["poster_url"] = catalog["poster_url"].fillna("")
+
     return catalog
