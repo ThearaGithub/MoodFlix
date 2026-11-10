@@ -63,6 +63,10 @@ def refresh_queue():
     st.session_state.queue = recommendations["movieId"].tolist()
 
 
+def reset_queue():
+    st.session_state.queue = []
+
+
 with st.sidebar:
     st.title("🎬 MoodFlix")
     st.caption("Mood-first movie discovery")
@@ -100,16 +104,14 @@ elif page == "Discover":
     st.title("Discover")
 
     moods = list(MOOD_GENRES.keys())
-    current_mood = st.radio(
+    st.radio(
         "How are you feeling?",
         moods,
-        index=moods.index(st.session_state.mood),
+        key="mood",
         horizontal=True,
         format_func=lambda mood: f"{MOOD_EMOJI[mood]} {mood}",
+        on_change=reset_queue,
     )
-    if current_mood != st.session_state.mood:
-        st.session_state.mood = current_mood
-        st.session_state.queue = []
 
     if not st.session_state.queue:
         refresh_queue()
