@@ -105,7 +105,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Fetch TMDB poster URLs for the MovieLens catalog."
     )
-    parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--workers", type=int, default=16)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--refresh", action="store_true")
     args = parser.parse_args()
