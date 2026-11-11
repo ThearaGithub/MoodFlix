@@ -1,11 +1,19 @@
+from pathlib import Path
+
 import streamlit as st
 
 from src.data_loader import load_catalog, load_ratings
 from src.mood import MOOD_EMOJI, MOOD_GENRES
 from src.recommender import recommend
-from src.ui import inject_css, movie_card
+from src.ui import inject_css, movie_card, poster_grid
 
-st.set_page_config(page_title="MoodFlix", page_icon="🎬", layout="wide")
+LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.jpe"
+
+st.set_page_config(
+    page_title="MoodFlix",
+    page_icon=str(LOGO_PATH),
+    layout="wide",
+)
 inject_css()
 
 PAGES = ["Home", "Discover", "Search", "Watchlist", "Insights", "About"]
@@ -30,6 +38,10 @@ if "seen" not in st.session_state:
     st.session_state.seen = []
 if "fresh_batch" not in st.session_state:
     st.session_state.fresh_batch = False
+if "search_page" not in st.session_state:
+    st.session_state.search_page = 1
+if "search_key" not in st.session_state:
+    st.session_state.search_key = ""
 if "mood" not in st.session_state:
     st.session_state.mood = "Happy"
 
@@ -79,8 +91,24 @@ def reset_queue():
     st.session_state.queue = []
 
 
+@st.dialog("Movie details", width="large")
+def show_movie_details(movie):
+    movie_card(movie)
+    movie_id = int(movie["movieId"])
+    if movie_id in st.session_state.watchlist:
+        st.caption("✓ Already in your watchlist.")
+    else:
+        st.button(
+            "➕ Add to watchlist",
+            key=f"dialog_add_{movie_id}",
+            on_click=add_to_watchlist,
+            args=(movie_id,),
+        )
+
+
 with st.sidebar:
-    st.title("🎬 MoodFlix")
+    st.image(str(LOGO_PATH), width=96)
+    st.title("MoodFlix")
     st.caption("Mood-first movie discovery")
     st.radio("Navigate", PAGES, key="nav")
     st.divider()
@@ -176,8 +204,12 @@ elif page == "Discover":
 
 elif page == "Search":
     st.title("Search the catalog")
+    st.caption(
+        "Search ignores upper and lower case. Every match is shown as a poster — "
+        "use the page buttons to browse long result lists."
+    )
 
-    query = st.text_input("Search by title", placeholder="e.g. Toy Story")
+    query = st.text_input("Search by title", placeholder="e.g. toy story")
     all_genres = sorted(
         {
             genre
@@ -189,9 +221,11 @@ elif page == "Search":
     selected_genres = st.multiselect("Filter by genre", all_genres)
 
     results = catalog.copy()
-    if query:
+    if query.strip():
         results = results[
-            results["title"].str.contains(query, case=False, na=False)
+            results["title"].str.contains(
+                query.strip(), case=False, regex=False, na=False
+            )
         ]
     if selected_genres:
         results = results[
@@ -203,20 +237,53 @@ elif page == "Search":
         ]
 
     st.write(f"{len(results):,} movies found")
-    st.dataframe(
-        results[["title", "genres", "year", "avg_rating", "rating_count"]].head(50),
-        width="stretch",
-        hide_index=True,
-    )
 
-    if not results.empty:
-        options = results.head(50)
-        selected_title = st.selectbox("Open a movie", options["title"].tolist())
-        selected_movie = options[options["title"] == selected_title].iloc[0]
-        movie_card(selected_movie)
-        if st.button("Add to watchlist"):
-            add_to_watchlist(int(selected_movie["movieId"]))
-            st.success("Added to watchlist.")
+    if results.empty:
+        st.info(
+            "No movies matched. Try a shorter title, check the spelling, "
+            "or clear the genre filter."
+        )
+    else:
+        page_size = 24
+        total_pages = max((len(results) + page_size - 1) // page_size, 1)
+        search_key = (
+            f"{query.strip().lower()}|{','.join(sorted(selected_genres))}"
+        )
+        if st.session_state.search_key != search_key:
+            st.session_state.search_key = search_key
+            st.session_state.search_page = 1
+
+        page_number = min(max(st.session_state.search_page, 1), total_pages)
+        st.session_state.search_page = page_number
+        start = (page_number - 1) * page_size
+        page_results = results.iloc[start : start + page_size]
+
+        st.caption("Click any movie poster to see its full details.")
+        poster_grid(
+            page_results,
+            on_select=show_movie_details,
+            key_prefix="search",
+        )
+
+        prev_col, info_col, next_col = st.columns([1, 3, 1])
+        with prev_col:
+            if st.button(
+                "← Previous", disabled=page_number <= 1, width="stretch"
+            ):
+                st.session_state.search_page = page_number - 1
+                st.rerun()
+        with info_col:
+            st.caption(
+                f"Page {page_number} of {total_pages} · showing "
+                f"{start + 1}–{min(start + page_size, len(results))} of "
+                f"{len(results):,} matches"
+            )
+        with next_col:
+            if st.button(
+                "Next →", disabled=page_number >= total_pages, width="stretch"
+            ):
+                st.session_state.search_page = page_number + 1
+                st.rerun()
 
 elif page == "Watchlist":
     st.title("Your watchlist")
