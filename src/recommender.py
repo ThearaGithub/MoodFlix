@@ -55,6 +55,8 @@ def recommend(
     mood=None,
     n=12,
     exclude_ids=None,
+    randomize=False,
+    pool_size=None,
 ):
     if catalog.empty:
         return catalog
@@ -108,6 +110,15 @@ def recommend(
         if len(mood_candidates) >= n:
             candidates = mood_candidates
 
-    return candidates.sort_values(
+    candidates = candidates.sort_values(
         ["score", "rating_count"], ascending=False
-    ).head(n)
+    )
+
+    if randomize:
+        pool_size = max(int(pool_size or n * 5), n)
+        pool = candidates.head(pool_size)
+        if len(pool) > n:
+            return pool.sample(n=n)
+        return pool.sample(frac=1.0)
+
+    return candidates.head(n)

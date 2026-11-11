@@ -70,6 +70,7 @@ def refresh_queue():
         mood=st.session_state.mood,
         n=20,
         exclude_ids=st.session_state.seen,
+        randomize=True,
     )
     st.session_state.queue = recommendations["movieId"].tolist()
 
@@ -115,7 +116,7 @@ elif page == "Discover":
     st.title("Discover")
 
     if st.session_state.fresh_batch:
-        st.success("Fresh batch loaded — movies you haven't been shown yet.")
+        st.success("Fresh batch loaded — new random picks you haven't been shown yet.")
         st.session_state.fresh_batch = False
 
     moods = list(MOOD_GENRES.keys())

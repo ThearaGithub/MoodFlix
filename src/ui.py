@@ -8,35 +8,36 @@ def inject_css():
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap');
 
         html, body, .stApp, [data-testid="stSidebar"], button, input, textarea, select {
-            font-family: "Outfit", "Segoe UI", system-ui, sans-serif;
+            font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
         }
 
         .stApp {
             background:
-                radial-gradient(1100px 620px at 8% -10%, rgba(124,92,255,.28), transparent 60%),
-                radial-gradient(900px 560px at 100% 0%, rgba(34,211,238,.18), transparent 55%),
-                #070b12;
-            color: #eef4ff;
-            font-family: "Outfit", "Segoe UI", system-ui, sans-serif;
+                radial-gradient(1200px 700px at 12% -15%, rgba(229,9,20,.20), transparent 60%),
+                radial-gradient(900px 600px at 100% 0%, rgba(229,9,20,.10), transparent 55%),
+                #0b0b0b;
+            color: #f5f5f5;
+            font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
         }
 
         [data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #0b1220, #070b12);
-            border-right: 1px solid rgba(255,255,255,.08);
+            background: linear-gradient(180deg, #000000, #0b0b0b);
+            border-right: 1px solid rgba(229,9,20,.35);
         }
 
         [data-testid="stSidebar"] p,
         [data-testid="stSidebar"] label {
-            color: #dbe7ff;
+            color: #e5e5e5;
         }
 
         [data-testid="stMarkdownContainer"] p,
         [data-testid="stMarkdownContainer"] li {
             font-size: 16px;
-            line-height: 1.6;
+            line-height: 1.65;
+            color: #d2d2d2;
         }
 
         [data-testid="stSidebar"] [data-testid="stRadio"] p {
@@ -45,26 +46,39 @@ def inject_css():
         }
 
         [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
-            color: #9fb2cf;
+            color: #8c8c8c;
             font-size: 13px;
         }
 
         h1 {
-            font-weight: 800 !important;
-            letter-spacing: -0.03em;
-            background: linear-gradient(90deg, #c4b5fd, #67e8f9);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent !important;
+            font-weight: 900 !important;
+            letter-spacing: -0.02em;
+            color: #ffffff !important;
+            text-shadow: 0 0 44px rgba(229,9,20,.38);
+        }
+
+        h2, h3 {
+            color: #f5f5f5 !important;
+        }
+
+        a {
+            color: #e50914 !important;
         }
 
         .mf-card {
-            background: linear-gradient(160deg, rgba(255,255,255,.09), rgba(255,255,255,.02));
-            border: 1px solid rgba(255,255,255,.12);
-            border-radius: 24px;
+            background: linear-gradient(160deg, #1c1c1c, #141414);
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: 16px;
             padding: 34px;
             margin: 8px 0 22px;
-            box-shadow: 0 30px 70px rgba(0,0,0,.45);
+            box-shadow: 0 30px 70px rgba(0,0,0,.6);
+            transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+        }
+
+        .mf-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(229,9,20,.45);
+            box-shadow: 0 34px 80px rgba(229,9,20,.16);
         }
 
         .mf-card-with-poster {
@@ -76,9 +90,9 @@ def inject_css():
         .mf-poster {
             width: 160px;
             min-width: 160px;
-            border-radius: 16px;
-            border: 1px solid rgba(255,255,255,.14);
-            box-shadow: 0 18px 40px rgba(0,0,0,.45);
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,.12);
+            box-shadow: 0 18px 40px rgba(0,0,0,.6);
             display: block;
         }
 
@@ -100,89 +114,103 @@ def inject_css():
         }
 
         .mf-kicker {
-            color: #67e8f9;
+            color: #e50914;
             font-size: .78rem;
-            font-weight: 700;
-            letter-spacing: .2em;
+            font-weight: 800;
+            letter-spacing: .22em;
             text-transform: uppercase;
         }
 
         .mf-title {
             font-size: 2.3rem;
-            font-weight: 800;
+            font-weight: 900;
             line-height: 1.1;
             margin: 10px 0 8px;
-            color: #f8fbff;
+            color: #ffffff;
         }
 
         .mf-meta {
-            color: #c3d2ea;
+            color: #b3b3b3;
             font-size: 1rem;
             font-weight: 500;
             margin-bottom: 14px;
         }
 
         .mf-rating {
-            color: #ffd166;
+            color: #f5c518;
             font-size: 1.15rem;
-            font-weight: 700;
+            font-weight: 800;
         }
 
         .mf-rating span {
-            color: #a9b8d0;
+            color: #a3a3a3;
             font-size: .95rem;
             font-weight: 400;
         }
 
         .mf-tags {
             margin-top: 14px;
-            color: #b9c9e5;
+            color: #9c9c9c;
             font-size: .95rem;
             font-style: italic;
             line-height: 1.5;
         }
 
         div.stButton > button {
-            background-image: linear-gradient(100deg, #7c5cff, #22d3ee);
-            color: #04121f;
+            background: #e50914;
+            color: #ffffff;
             font-size: 1rem;
-            font-weight: 700;
+            font-weight: 800;
+            letter-spacing: .02em;
             border: none;
-            border-radius: 12px;
+            border-radius: 6px;
             padding: 10px 20px;
+            transition: background .15s ease, transform .15s ease, box-shadow .15s ease;
         }
 
         div.stButton > button:hover {
-            filter: brightness(1.08);
-            box-shadow: 0 14px 30px rgba(34,211,238,.3);
+            background: #f6121d;
+            color: #ffffff;
+            transform: translateY(-1px);
+            box-shadow: 0 14px 30px rgba(229,9,20,.35);
+        }
+
+        div.stButton > button:active {
+            transform: translateY(0);
         }
 
         [data-testid="stMetric"] {
-            background: rgba(255,255,255,.045);
-            border: 1px solid rgba(255,255,255,.09);
-            border-radius: 16px;
+            background: linear-gradient(160deg, #1c1c1c, #151515);
+            border: 1px solid rgba(255,255,255,.08);
+            border-left: 3px solid #e50914;
+            border-radius: 12px;
             padding: 16px 18px;
         }
 
         [data-testid="stMetricLabel"] p {
-            color: #b9c9e5 !important;
+            color: #b3b3b3 !important;
             font-size: 14px;
             font-weight: 600;
         }
 
         [data-testid="stMetricValue"] p {
-            color: #f4f8ff !important;
+            color: #ffffff !important;
             font-size: 34px;
-            font-weight: 700;
+            font-weight: 800;
         }
 
         [data-testid="stWidgetLabel"] p {
-            color: #e6efff !important;
+            color: #e5e5e5 !important;
             font-weight: 600;
         }
 
         [data-testid="stCaptionContainer"] p {
-            color: #aebdd6 !important;
+            color: #8c8c8c !important;
+        }
+
+        [data-testid="stDataFrame"] {
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: 12px;
         }
         </style>
         """,
