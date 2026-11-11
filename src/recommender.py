@@ -47,7 +47,15 @@ def _collaborative_scores(catalog, ratings, liked_ids):
     return scores / 5.0
 
 
-def recommend(catalog, ratings, liked_ids, disliked_ids, mood=None, n=12):
+def recommend(
+    catalog,
+    ratings,
+    liked_ids,
+    disliked_ids,
+    mood=None,
+    n=12,
+    exclude_ids=None,
+):
     if catalog.empty:
         return catalog
 
@@ -84,10 +92,12 @@ def recommend(catalog, ratings, liked_ids, disliked_ids, mood=None, n=12):
         + 0.10 * mood_score
     )
 
+    blocked = set(liked_ids) | set(disliked_ids)
+    if exclude_ids:
+        blocked |= set(exclude_ids)
+
     candidates = catalog.assign(score=score)
-    candidates = candidates[
-        ~candidates["movieId"].isin(set(liked_ids) | set(disliked_ids))
-    ]
+    candidates = candidates[~candidates["movieId"].isin(blocked)]
 
     if selected_genres:
         mood_candidates = candidates[

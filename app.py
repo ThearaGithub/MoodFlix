@@ -26,6 +26,10 @@ if "watchlist" not in st.session_state:
     st.session_state.watchlist = []
 if "queue" not in st.session_state:
     st.session_state.queue = []
+if "seen" not in st.session_state:
+    st.session_state.seen = []
+if "fresh_batch" not in st.session_state:
+    st.session_state.fresh_batch = False
 if "mood" not in st.session_state:
     st.session_state.mood = "Happy"
 
@@ -52,6 +56,12 @@ def add_to_watchlist(movie_id):
 
 
 def refresh_queue():
+    # Movies already dealt out in the deck count as seen, so a refresh
+    # serves a genuinely fresh batch instead of the same top results.
+    for movie_id in st.session_state.queue:
+        if movie_id not in st.session_state.seen:
+            st.session_state.seen.append(movie_id)
+
     recommendations = recommend(
         catalog,
         ratings,
@@ -59,6 +69,7 @@ def refresh_queue():
         st.session_state.disliked,
         mood=st.session_state.mood,
         n=20,
+        exclude_ids=st.session_state.seen,
     )
     st.session_state.queue = recommendations["movieId"].tolist()
 
@@ -103,6 +114,10 @@ if page == "Home":
 elif page == "Discover":
     st.title("Discover")
 
+    if st.session_state.fresh_batch:
+        st.success("Fresh batch loaded — movies you haven't been shown yet.")
+        st.session_state.fresh_batch = False
+
     moods = list(MOOD_GENRES.keys())
     st.radio(
         "How are you feeling?",
@@ -117,9 +132,10 @@ elif page == "Discover":
         refresh_queue()
 
     if not st.session_state.queue:
-        st.warning("No movies left in this batch. Reset your passes to see more.")
-        if st.button("Reset passes"):
+        st.warning("No unseen movies left for this mood. Start over to replay the deck.")
+        if st.button("Start over"):
             st.session_state.disliked = []
+            st.session_state.seen = []
             st.session_state.queue = []
             st.rerun()
     else:
@@ -148,10 +164,12 @@ elif page == "Discover":
         with refresh_col:
             if st.button("🔁 New recommendations", width="stretch"):
                 refresh_queue()
+                st.session_state.fresh_batch = True
                 st.rerun()
 
         st.caption(
             f"{len(st.session_state.queue)} movies left in this batch · "
+            f"{len(st.session_state.seen)} dealt this session · "
             f"{len(st.session_state.liked)} liked"
         )
 
