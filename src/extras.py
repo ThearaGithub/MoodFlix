@@ -1,4 +1,4 @@
-"""Trailer and cast lookups for the movie details dialog.
+"""Trailer, cast, and streaming-availability lookups for MoodFlix dialogs.
 
 TMDB is used automatically when a key or bearer token is configured in
 ``.streamlit/secrets.toml`` (or the ``TMDB_API_KEY`` / ``TMDB_API_TOKEN``
@@ -33,6 +33,11 @@ from bs4 import BeautifulSoup
 ROOT = Path(__file__).resolve().parent.parent
 SECRETS_PATH = ROOT / ".streamlit" / "secrets.toml"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w185"
+WATCH_LOGO_BASE = "https://image.tmdb.org/t/p/w92"
+JUSTWATCH_BASE = "https://www.justwatch.com"
+DEFAULT_WATCH_REGION = "US"
+# JustWatch uses a few regional slugs that differ from the ISO code.
+JUSTWATCH_REGION_SLUGS = {"GB": "uk"}
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 TIMEOUT = 8
 TOTAL_TIMEOUT = 12
@@ -202,6 +207,91 @@ def _tmdb_credentials() -> tuple[str, str]:
     return key, token
 
 
+def _watch_region() -> str:
+    """Region used for streaming availability (``TMDB_WATCH_REGION``)."""
+    region = os.getenv("TMDB_WATCH_REGION", "").strip()
+
+    if not region and SECRETS_PATH.exists():
+        try:
+            secrets = tomllib.loads(
+                SECRETS_PATH.read_text(encoding="utf-8")
+            )
+            region = str(secrets.get("TMDB_WATCH_REGION", "")).strip()
+        except (OSError, tomllib.TOMLDecodeError):
+            pass
+
+    if not region:
+        try:
+            region = str(st.secrets.get("TMDB_WATCH_REGION", "")).strip()
+        except Exception:
+            # st.secrets raises when no secrets file is configured.
+            pass
+
+    region = region.upper()[:2]
+    return region if len(region) == 2 and region.isalpha() else DEFAULT_WATCH_REGION
+
+
+def _justwatch_search_url(region: str, title: str, year: int | None) -> str:
+    """Keyless fallback: a JustWatch search page for this title."""
+    slug = JUSTWATCH_REGION_SLUGS.get(region, region.lower())
+    # Catalog titles end with the release year in parentheses, and MovieLens
+    # sorts articles to the end ("Matrix, The").
+    clean_title = re.sub(r"\s*\(\d{4}\)\s*$", "", str(title or "")).strip()
+    flipped = re.match(r"^(.*),\s*(The|A|An)$", clean_title, flags=re.IGNORECASE)
+    if flipped:
+        clean_title = f"{flipped.group(2)} {flipped.group(1)}"
+    query = f"{clean_title} {year}" if year else clean_title
+    return f"{JUSTWATCH_BASE}/{slug}/search?" + urllib.parse.urlencode(
+        {"q": query}
+    )
+
+
+def _release_year(value) -> int | None:
+    """Extract a year from a TMDB ``release_date`` such as 1999-03-31."""
+    match = re.match(r"(\d{4})", str(value or "").strip())
+    return int(match.group(1)) if match else None
+
+
+def _watch_providers(
+    payload: dict | None, region: str, title: str, year: int | None
+) -> dict:
+    """Shape TMDB's ``watch/providers`` payload for the details dialog.
+
+    Returns the offers for one region grouped by how the movie can be
+    watched, plus the TMDB watch page (which redirects to JustWatch) and a
+    keyless JustWatch search link used when no region data exists.
+    """
+    results = (payload or {}).get("results") or {}
+    entry = results.get(region) or {}
+
+    groups: dict[str, list[dict]] = {}
+    for group in ("flatrate", "free", "ads", "rent", "buy"):
+        providers = []
+        seen = set()
+        for item in entry.get(group) or []:
+            name = str(item.get("provider_name", "") or "").strip()
+            if not name or name.lower() in seen:
+                continue
+            seen.add(name.lower())
+            logo = str(item.get("logo_path", "") or "").strip()
+            providers.append(
+                {
+                    "name": name,
+                    "logo_url": f"{WATCH_LOGO_BASE}{logo}" if logo else "",
+                }
+            )
+        if providers:
+            groups[group] = providers
+
+    return {
+        "region": region,
+        "available": bool(groups),
+        "link": str(entry.get("link", "") or "").strip(),
+        "groups": groups,
+        "search_url": _justwatch_search_url(region, title, year),
+    }
+
+
 def _pick_tmdb_video(videos: list[dict]) -> dict | None:
     candidates = [
         video
@@ -234,7 +324,8 @@ def _tmdb_extras(tmdb_id: int | None) -> dict | None:
 
     url = (
         f"https://api.themoviedb.org/3/movie/{int(tmdb_id)}"
-        "?append_to_response=credits,videos&language=en-US"
+        "?append_to_response=credits,videos,watch/providers"
+        "&language=en-US"
     )
     headers = {"User-Agent": USER_AGENT}
     if token:
@@ -274,6 +365,12 @@ def _tmdb_extras(tmdb_id: int | None) -> dict | None:
             }
             if video
             else None
+        ),
+        "watch": _watch_providers(
+            data.get("watch/providers"),
+            _watch_region(),
+            str(data.get("title", "") or ""),
+            _release_year(data.get("release_date")),
         ),
         "source": "TMDB",
     }
@@ -974,6 +1071,7 @@ def _web_extras(
         "cast": cast,
         "overview": overview,
         "trailer": trailer,
+        "watch": None,
         "source": "web",
     }
 
@@ -993,10 +1091,13 @@ def _normalise_imdb_id(imdb_id) -> str:
 def get_movie_extras(
     tmdb_id: int | None, imdb_id: str, title: str, year: int | None
 ) -> dict:
-    """Return ``{"cast": [...], "trailer": {...}|None, "source": str}``.
+    """Return ``{"cast", "overview", "trailer", "watch", "source"}``.
 
     TMDB is tried first when credentials are configured. Missing pieces are
     filled from the keyless web fallback.
+
+    ``watch`` is always a dict shaped by ``_watch_providers()``, so the UI can
+    render a search fallback even when no TMDB credentials exist.
     """
     tmdb_extras = _tmdb_extras(tmdb_id)
     web_extras = None
@@ -1012,7 +1113,12 @@ def get_movie_extras(
                 title, year, _normalise_imdb_id(imdb_id)
             )
         except Exception:
-            web_extras = {"cast": [], "trailer": None, "source": "web"}
+            web_extras = {
+                "cast": [],
+                "overview": "",
+                "trailer": None,
+                "source": "web",
+            }
 
     if tmdb_extras:
         if not tmdb_extras.get("cast") and web_extras:
@@ -1021,11 +1127,16 @@ def get_movie_extras(
             tmdb_extras["trailer"] = web_extras["trailer"]
         if not tmdb_extras.get("overview") and web_extras:
             tmdb_extras["overview"] = web_extras.get("overview", "")
+        tmdb_extras.setdefault(
+            "watch", _watch_providers(None, _watch_region(), title, year)
+        )
         return tmdb_extras
 
-    return web_extras or {
+    extras = web_extras or {
         "cast": [],
         "overview": "",
         "trailer": None,
         "source": "none",
     }
+    extras["watch"] = _watch_providers(None, _watch_region(), title, year)
+    return extras

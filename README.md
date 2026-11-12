@@ -18,6 +18,7 @@ MoodFlix learns from the movies you like, blends content similarity, rating qual
 - Case-insensitive search with poster grids, genre filters, and pagination
 - Click any poster to open a detail dialog with trailer, cast, poster, rating, genres, and tags
 - Trailer playback and top-billed cast with photos
+- "Where to watch" streaming logos (stream, free, rent, buy) with JustWatch links
 - Watchlist with CSV export
 - TMDB movie posters with a graceful fallback
 - Model insights and catalog statistics
@@ -114,6 +115,12 @@ results for a trailer and reads cast information from Wikipedia/Wikidata.
 Adding a TMDB key makes the lookups richer and faster — TMDB is used first,
 and the public sources fill in anything missing.
 
+Streaming availability (the "Where to watch" row) needs a TMDB key, since the
+provider data comes from TMDB's watch-provider endpoint. The region defaults
+to `US`; set `TMDB_WATCH_REGION` in `.streamlit/secrets.toml` or the
+environment (for example `GB`) to change it. Without a key, the dialog shows a
+JustWatch search link for the movie instead.
+
 Run the app:
 
 ```bash
@@ -143,7 +150,8 @@ genre. Every match is displayed as a poster tile; results are paginated
 24 movies at a time, so even a broad query like "the" (over 3,000 matches) is
 fully browsable. Clicking any poster opens a movie-details dialog with the
 poster, rating, genres, tags, an embedded trailer, top-billed cast (with
-photos when available), and an **Add to watchlist** button.
+photos when available), a **Where to watch** row, and an **Add to watchlist**
+button.
 
 ## Camera Mood Detection (optional)
 
@@ -190,9 +198,9 @@ Discover will fill it. Clicking a poster opens the same details dialog.
 ## Movie Details and Extras
 
 The dialog shows a plot description, a red **taste-match meter** for the model
-score (once you have liked something), the trailer, the cast, and a
-**You may like** grid of four model picks that can be clicked through to their
-own details.
+score (once you have liked something), the trailer, the cast, a **Where to
+watch** row of streaming-provider logos, and a **You may like** grid of four
+model picks that can be clicked through to their own details.
 
 Clicking a poster opens a dialog with the poster, a short plot description, the
 top-billed cast as photo cards, an embedded trailer, and a "You may like" row
@@ -208,6 +216,10 @@ breaking.
   YouTube trailers) and Wikipedia/Wikidata for the cast.
 - If a trailer or cast list is unavailable, the dialog shows a friendly
   fallback instead of an error.
+- **Where to watch** groups providers into Stream, Free, Free with ads, Rent,
+  and Buy. Clicking a logo opens the movie's TMDB watch page, which redirects
+  to JustWatch. When no offers are listed for the region (or no TMDB key is
+  configured), the section shows a link to search the movie on JustWatch.
 
 ## How Recommendations Work
 
@@ -280,6 +292,8 @@ endorsed or certified by TMDB.
 
 Trailer playback uses YouTube embeds. Cast information comes from Wikipedia
 and Wikidata when no TMDB key is configured, and from TMDB when one is.
+
+Streaming availability is provided by JustWatch through TMDB.
 
 ## Team
 

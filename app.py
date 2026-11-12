@@ -25,6 +25,7 @@ from src.ui import (
     poster_grid,
     taste_meter,
     trailer_block,
+    watch_providers_block,
 )
 
 LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.jpe"
@@ -231,6 +232,9 @@ def show_movie_details(movie):
         st.caption("Trailer and cast via TMDB.")
     elif source == "web":
         st.caption("Trailer via YouTube · Cast via Wikipedia/Wikidata.")
+
+    st.subheader("Where to watch")
+    watch_providers_block(extras.get("watch"))
 
     movie_id = int(movie["movieId"])
     if movie_id in st.session_state.watchlist:

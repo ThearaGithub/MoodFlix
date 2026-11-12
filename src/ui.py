@@ -434,6 +434,85 @@ def inject_css():
             overflow: hidden;
         }
 
+        .mf-watch {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 6px 0 18px;
+        }
+
+        .mf-watch-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .mf-watch-label {
+            width: 112px;
+            flex: 0 0 auto;
+            font-size: .68rem;
+            font-weight: 700;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: #c49fa2;
+        }
+
+        .mf-watch-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .mf-watch-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 13px 6px 6px;
+            border-radius: 999px;
+            background: linear-gradient(160deg, rgba(229,9,20,.14), #170709);
+            border: 1px solid rgba(229,9,20,.3);
+            color: #ffffff !important;
+            font-size: .82rem;
+            font-weight: 600;
+            text-decoration: none !important;
+            transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+        }
+
+        a.mf-watch-chip:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255,92,102,.8);
+            box-shadow: 0 8px 20px rgba(229,9,20,.35);
+        }
+
+        .mf-watch-logo {
+            width: 24px;
+            height: 24px;
+            border-radius: 7px;
+            object-fit: cover;
+            display: block;
+            background: #2a0b0e;
+        }
+
+        .mf-watch-name {
+            white-space: nowrap;
+        }
+
+        .mf-watch-foot {
+            font-size: .78rem;
+            color: #a9878a;
+        }
+
+        .mf-watch-foot a {
+            color: #ff8a8f !important;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .mf-watch-foot a:hover {
+            text-decoration: underline;
+        }
+
         /* Webcam preview reads as a mirror: front cameras are not mirrored by
            the browser, and a mirrored selfie is what people expect. This is a
            display-only transform on the captured element, so the bytes sent to
@@ -648,6 +727,95 @@ def cast_grid(cast):
 
     st.markdown(
         f'<div class="mf-cast-grid">{"".join(cards)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+WATCH_GROUP_LABELS = (
+    ("flatrate", "Stream"),
+    ("free", "Free"),
+    ("ads", "Free with ads"),
+    ("rent", "Rent"),
+    ("buy", "Buy"),
+)
+
+
+def _safe_url(value):
+    value = str(value or "").strip()
+    if value.startswith(("https://", "http://")):
+        return escape(value, quote=True)
+    return ""
+
+
+def watch_providers_block(watch):
+    """Render TMDB streaming offers as provider logo chips.
+
+    ``watch`` is the dict from ``get_movie_extras()["watch"]``. Without
+    offers (or without TMDB credentials) it degrades to a caption plus a
+    JustWatch search link.
+    """
+    watch = watch or {}
+    region = str(watch.get("region", "") or "").strip().upper()
+    link = _safe_url(watch.get("link"))
+    search_url = _safe_url(watch.get("search_url"))
+    groups = watch.get("groups") or {}
+
+    rows = []
+    for key, label in WATCH_GROUP_LABELS:
+        chips = []
+        for provider in groups.get(key) or []:
+            name = str(provider.get("name", "") or "").strip()
+            if not name:
+                continue
+            logo = _safe_url(provider.get("logo_url"))
+            media = (
+                f'<img class="mf-watch-logo" src="{logo}" alt="" loading="lazy">'
+                if logo
+                else ""
+            )
+            if link:
+                chips.append(
+                    f'<a class="mf-watch-chip" href="{link}" target="_blank" '
+                    f'rel="noopener noreferrer">{media}'
+                    f'<span class="mf-watch-name">{escape(name)}</span></a>'
+                )
+            else:
+                chips.append(
+                    f'<span class="mf-watch-chip">{media}'
+                    f'<span class="mf-watch-name">{escape(name)}</span></span>'
+                )
+        if not chips:
+            continue
+        rows.append(
+            f'<div class="mf-watch-row"><span class="mf-watch-label">'
+            f'{escape(label)}</span><div class="mf-watch-chips">'
+            f'{"".join(chips)}</div></div>'
+        )
+
+    if not rows:
+        where = f" in {region}" if region else ""
+        st.caption(
+            f"No streaming offers are listed{where}. "
+            + (
+                f"[Search JustWatch ↗]({search_url})"
+                if search_url
+                else ""
+            )
+        )
+        return
+
+    foot_link = link or search_url
+    foot = (
+        f'<a href="{foot_link}" target="_blank" rel="noopener noreferrer">'
+        "See all options ↗</a>"
+        if foot_link
+        else ""
+    )
+    where = f" · availability in {region}" if region else ""
+    st.markdown(
+        f'<div class="mf-watch">{"".join(rows)}'
+        f'<div class="mf-watch-foot">{escape("Offers via JustWatch")}'
+        f"{escape(where)}<br>{foot}</div></div>",
         unsafe_allow_html=True,
     )
 
