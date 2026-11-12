@@ -64,6 +64,25 @@ def load_movie_stats():
     )
 
 
+@st.cache_data(show_spinner=False, ttl=300)
+def load_links():
+    path = DATA_DIR / "links.csv"
+    if not path.exists():
+        return pd.DataFrame(columns=["movieId", "imdbId", "tmdbId"])
+    links = pd.read_csv(
+        path, dtype={"imdbId": "string", "tmdbId": "Int64"}
+    )
+    if "imdbId" not in links.columns:
+        links["imdbId"] = ""
+    if "tmdbId" not in links.columns:
+        links["tmdbId"] = pd.NA
+    links["imdbId"] = links["imdbId"].fillna("").astype(str).str.strip()
+    links.loc[
+        links["imdbId"].isin(["", "nan", "<NA>", "None"]), "imdbId"
+    ] = ""
+    return links[["movieId", "imdbId", "tmdbId"]].drop_duplicates("movieId")
+
+
 @st.cache_data(show_spinner=False)
 def load_catalog():
     movies = load_movies()
@@ -78,5 +97,13 @@ def load_catalog():
     else:
         catalog["poster_url"] = ""
     catalog["poster_url"] = catalog["poster_url"].fillna("")
+
+    links = load_links()
+    if not links.empty:
+        catalog = catalog.merge(links, on="movieId", how="left")
+    else:
+        catalog["imdbId"] = ""
+        catalog["tmdbId"] = pd.NA
+    catalog["imdbId"] = catalog["imdbId"].fillna("").astype(str)
 
     return catalog

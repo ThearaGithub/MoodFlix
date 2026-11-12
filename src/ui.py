@@ -1,3 +1,4 @@
+import re
 from html import escape
 
 import pandas as pd
@@ -302,6 +303,61 @@ def inject_css():
             margin-top: 4px;
         }
 
+        .mf-cast-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+            gap: 14px;
+            margin: 6px 0 18px;
+        }
+
+        .mf-cast-card {
+            background: linear-gradient(160deg, rgba(229,9,20,.12), #170709);
+            border: 1px solid rgba(229,9,20,.28);
+            border-radius: 12px;
+            padding: 14px 10px 12px;
+            text-align: center;
+        }
+
+        .mf-cast-photo {
+            width: 84px;
+            height: 84px;
+            border-radius: 50%;
+            object-fit: cover;
+            display: block;
+            margin: 0 auto 9px;
+            border: 2px solid rgba(229,9,20,.55);
+            background: #2a0b0e;
+            box-shadow: 0 10px 24px rgba(0,0,0,.5);
+        }
+
+        .mf-cast-initials {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ff8a8f;
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: .04em;
+        }
+
+        .mf-cast-name {
+            color: #ffffff;
+            font-weight: 700;
+            font-size: .88rem;
+            line-height: 1.2;
+        }
+
+        .mf-cast-role {
+            color: #c49fa2;
+            font-size: .76rem;
+            line-height: 1.3;
+            margin-top: 3px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
         /* Invisible click layer: the whole poster acts as a button */
         [class*="st-key-mfposter_"] {
             position: relative;
@@ -367,6 +423,72 @@ def movie_card(movie):
             </div>
         </div>
         """,
+        unsafe_allow_html=True,
+    )
+
+
+def trailer_block(trailer):
+    if not trailer or not trailer.get("key"):
+        st.caption("Trailer not available for this movie.")
+        return
+
+    key = str(trailer["key"]).strip()
+    st.video(f"https://www.youtube.com/watch?v={key}")
+    title = str(trailer.get("name", "") or "").strip()
+    if title:
+        st.caption(f"🎬 {title}")
+
+
+def cast_grid(cast):
+    if not cast:
+        st.caption("Cast information is not available for this movie.")
+        return
+
+    cards = []
+    for person in cast:
+        name = str(person.get("name", "") or "").strip()
+        if not name:
+            continue
+        role = str(person.get("character", "") or "").strip()
+        photo_url = str(person.get("photo_url", "") or "").strip()
+        safe_name = escape(name)
+        safe_role = escape(role)
+
+        if photo_url.startswith(("https://", "http://")):
+            media = (
+                f'<img class="mf-cast-photo" '
+                f'src="{escape(photo_url, quote=True)}" '
+                f'alt="{safe_name}" loading="lazy">'
+            )
+        else:
+            parts = [part for part in re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]+", name)]
+            initials = "".join(part[0] for part in parts[:2]).upper() or "?"
+            media = (
+                f'<div class="mf-cast-photo mf-cast-initials">'
+                f"{escape(initials)}</div>"
+            )
+
+        role_html = (
+            f'<div class="mf-cast-role">{safe_role}</div>'
+            if safe_role
+            else ""
+        )
+        cards.append(
+            f"""
+            <div class="mf-cast-card">
+                {media}
+                <div class="mf-cast-name">{safe_name}</div>
+                {role_html}
+            </div>
+            """
+        )
+
+    if not cards:
+        st.caption("Cast information is not available for this movie.")
+        return
+
+    st.markdown(
+        f'<div class="mf-cast-grid">{"".join(cards)}</div>',
         unsafe_allow_html=True,
     )
 

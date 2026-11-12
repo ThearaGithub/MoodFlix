@@ -1,11 +1,13 @@
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 from src.data_loader import load_catalog, load_ratings
+from src.extras import get_movie_extras
 from src.mood import MOOD_EMOJI, MOOD_GENRES
 from src.recommender import recommend
-from src.ui import inject_css, movie_card, poster_grid
+from src.ui import cast_grid, inject_css, movie_card, poster_grid, trailer_block
 
 LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.jpe"
 
@@ -94,6 +96,47 @@ def reset_queue():
 @st.dialog("Movie details", width="large")
 def show_movie_details(movie):
     movie_card(movie)
+
+    year_value = movie.get("year")
+    year_value = (
+        int(year_value)
+        if year_value is not None and pd.notna(year_value)
+        else None
+    )
+    tmdb_value = movie.get("tmdbId")
+    tmdb_value = (
+        int(tmdb_value)
+        if tmdb_value is not None and pd.notna(tmdb_value)
+        else None
+    )
+    imdb_value = movie.get("imdbId")
+    imdb_value = (
+        str(imdb_value)
+        if imdb_value is not None and pd.notna(imdb_value)
+        else ""
+    )
+
+    with st.spinner("Loading trailer and cast…"):
+        extras = get_movie_extras(
+            tmdb_value,
+            imdb_value,
+            str(movie.get("title", "")),
+            year_value,
+        )
+
+    st.divider()
+    st.subheader("Trailer")
+    trailer_block(extras.get("trailer"))
+
+    st.subheader("Cast")
+    cast_grid(extras.get("cast") or [])
+
+    source = extras.get("source")
+    if source == "TMDB":
+        st.caption("Trailer and cast via TMDB.")
+    elif source == "web":
+        st.caption("Trailer via YouTube · Cast via Wikipedia/Wikidata.")
+
     movie_id = int(movie["movieId"])
     if movie_id in st.session_state.watchlist:
         st.caption("✓ Already in your watchlist.")

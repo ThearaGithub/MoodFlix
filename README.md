@@ -14,7 +14,8 @@ MoodFlix learns from the movies you like, blends content similarity, rating qual
 - Content-based recommendations from genres
 - Collaborative filtering from MovieLens ratings
 - Case-insensitive search with poster grids, genre filters, and pagination
-- Movie detail cards with posters, ratings, and tags
+- Click any poster to open a detail dialog with trailer, cast, poster, rating, genres, and tags
+- Trailer playback and top-billed cast with photos
 - Watchlist with CSV export
 - TMDB movie posters with a graceful fallback
 - Model insights and catalog statistics
@@ -30,6 +31,7 @@ MoodFlix learns from the movies you like, blends content similarity, rating qual
 - Streamlit
 - Pandas
 - NumPy
+- BeautifulSoup
 - MovieLens Latest Small dataset
 
 ## Project Structure
@@ -59,6 +61,7 @@ MoodFlix/
 │   └── fetch_posters.py
 └── src/
     ├── data_loader.py
+    ├── extras.py
     ├── mood.py
     ├── recommender.py
     └── ui.py
@@ -93,6 +96,11 @@ API key, and run:
 python scripts/fetch_posters.py
 ```
 
+Trailers and cast work without any key: the app searches Bing video
+results for a trailer and reads cast information from Wikipedia/Wikidata.
+Adding a TMDB key makes the lookups richer and faster — TMDB is used first,
+and the public sources fill in anything missing.
+
 Run the app:
 
 ```bash
@@ -121,7 +129,20 @@ The Search page matches any part of a title, ignoring upper and lower case
 genre. Every match is displayed as a poster tile; results are paginated
 24 movies at a time, so even a broad query like "the" (over 3,000 matches) is
 fully browsable. Clicking any poster opens a movie-details dialog with the
-poster, rating, genres, tags, and an **Add to watchlist** button.
+poster, rating, genres, tags, an embedded trailer, top-billed cast (with
+photos when available), and an **Add to watchlist** button.
+
+## Movie Details and Extras
+
+Clicking a poster plays the trailer in the dialog and shows the top-billed
+cast as photo cards. Lookups are cached for six hours per movie, so reopening
+the same title is instant.
+
+- With TMDB credentials, cast and trailers come from TMDB first.
+- Without credentials, the app falls back to Bing video search (which links to
+  YouTube trailers) and Wikipedia/Wikidata for the cast.
+- If a trailer or cast list is unavailable, the dialog shows a friendly
+  fallback instead of an error.
 
 ## How Recommendations Work
 
@@ -158,6 +179,9 @@ https://grouplens.org/datasets/movielens/
 
 Poster images courtesy of TMDB. This product uses the TMDB API but is not
 endorsed or certified by TMDB.
+
+Trailer playback uses YouTube embeds. Cast information comes from Wikipedia
+and Wikidata when no TMDB key is configured, and from TMDB when one is.
 
 ## Team
 
