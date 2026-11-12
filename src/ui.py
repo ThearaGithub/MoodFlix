@@ -434,6 +434,15 @@ def inject_css():
             overflow: hidden;
         }
 
+        /* Webcam preview reads as a mirror: front cameras are not mirrored by
+           the browser, and a mirrored selfie is what people expect. This is a
+           display-only transform on the captured element, so the bytes sent to
+           the emotion model are unchanged. */
+        [data-testid="stCameraInput"] video,
+        [data-testid="stCameraInput"] img {
+            transform: scaleX(-1);
+        }
+
         /* Invisible click layer: the whole poster acts as a button */
         [class*="st-key-mfposter_"] {
             position: relative;

@@ -32,6 +32,7 @@ MoodFlix is a single-page Streamlit app. `app.py` is the only entrypoint and con
 - `suggest_mood()` maps the top emotion onto a mood via `EMOTION_TO_MOOD`; `Romantic`, `Nostalgic`, and `Thoughtful` do not come from faces. The manual mood radio is the source of truth: the camera only offers a `Use <mood>` button whose callback (`set_mood()`) sets `session_state.mood` and clears the queue. Never set `session_state.mood` after the radio widget is instantiated — use the callback.
 - Privacy contract: the frame goes to a temp file only because DeepFace takes a path, and that file is deleted in `finally`. Nothing is uploaded, cached, or kept in `session_state`; keep it that way and keep the About/README wording accurate.
 - `st.camera_input` cannot be exercised from `AppTest` and needs a real webcam plus `localhost`/HTTPS, so a UI regression test only covers the install-hint branch. Verify the camera path by hand.
+- The webcam preview is mirrored with `transform: scaleX(-1)` on `[data-testid="stCameraInput"] video, img` in `inject_css()`. It is display-only: the captured frame sent to the model is unchanged, so do not "fix" the mirror in the image bytes.
 
 ## Extras and external APIs
 

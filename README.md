@@ -157,6 +157,10 @@ That pulls in TensorFlow, so it is a large download (roughly 600 MB) and is
 kept out of `requirements.txt`; the app runs normally without it and the panel
 shows an install hint instead.
 
+The preview and the captured photo are mirrored, like a bathroom mirror, so
+the image matches what you see in the camera. The mirror is a display effect
+only; the frame handed to the model is unchanged.
+
 Expressions map onto six of the eight moods: happy to Happy, surprise and
 anger to Excited, fear to Scared, disgust to Thoughtful, sadness to Sad, and
 neutral to Relaxed. Romantic and Nostalgic have no facial signal, so they stay
