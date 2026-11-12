@@ -57,6 +57,7 @@ def recommend(
     exclude_ids=None,
     randomize=False,
     pool_size=None,
+    personal_scores=None,
 ):
     if catalog.empty:
         return catalog
@@ -76,7 +77,13 @@ def recommend(
     else:
         popularity = np.zeros_like(counts)
 
-    collaborative = _collaborative_scores(catalog, ratings, liked_ids)
+    # The latent-factor model supplies the personal term once the session has
+    # likes; the rating-based heuristic stays as the fallback so the deck
+    # never depends on the model being available.
+    if personal_scores is not None:
+        collaborative = np.asarray(personal_scores, dtype=float)
+    else:
+        collaborative = _collaborative_scores(catalog, ratings, liked_ids)
 
     mood_score = np.zeros(len(catalog))
     selected_genres = mood_genres(mood) if mood else []

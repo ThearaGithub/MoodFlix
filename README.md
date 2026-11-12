@@ -6,13 +6,14 @@ MoodFlix learns from the movies you like, blends content similarity, rating qual
 
 ## Features
 
-- Netflix-style dark theme with a custom MoodFlix logo
+- Netflix-style dark theme with a custom MoodFlix logo and a slowly drifting red gradient background
 - Mood-based discovery across 8 moods (Happy, Excited, Relaxed, Romantic, Thoughtful, Scared, Nostalgic, Sad)
 - Swipe-style Like / Pass deck
 - Randomized recommendation batches: every new batch is sampled from the best candidates, so the same movie does not come up every time
 - No repeats within a session — movies already shown, liked, or passed are excluded from later batches
 - Content-based recommendations from genres
-- Collaborative filtering from MovieLens ratings
+- Trained latent-factor model (biased matrix factorisation / SVD) that supplies the personal match signal, evaluated on held-out ratings
+- Collaborative filtering from MovieLens ratings as the model's fallback
 - Case-insensitive search with poster grids, genre filters, and pagination
 - Click any poster to open a detail dialog with trailer, cast, poster, rating, genres, and tags
 - Trailer playback and top-billed cast with photos
@@ -58,10 +59,12 @@ MoodFlix/
 │   └── posters.csv
 ├── scripts/
 │   ├── download_data.py
+│   ├── evaluate_model.py
 │   └── fetch_posters.py
 └── src/
     ├── data_loader.py
     ├── extras.py
+    ├── model.py
     ├── mood.py
     ├── recommender.py
     └── ui.py
@@ -132,11 +135,28 @@ fully browsable. Clicking any poster opens a movie-details dialog with the
 poster, rating, genres, tags, an embedded trailer, top-billed cast (with
 photos when available), and an **Add to watchlist** button.
 
+## You May Like
+
+Once you have liked at least one movie, the **Home** page shows a "You may
+like" row: the six movies with the best combination of your latent taste match
+and rating quality. Before that, the row explains that liking a few movies in
+Discover will fill it. Clicking a poster opens the same details dialog.
+
 ## Movie Details and Extras
 
-Clicking a poster plays the trailer in the dialog and shows the top-billed
-cast as photo cards. Lookups are cached for six hours per movie, so reopening
+The dialog shows a plot description, a red **taste-match meter** for the model
+score (once you have liked something), the trailer, the cast, and a
+**You may like** grid of four model picks that can be clicked through to their
+own details.
+
+Clicking a poster opens a dialog with the poster, a short plot description, the
+top-billed cast as photo cards, an embedded trailer, and a "You may like" row
+of four model picks. Lookups are cached for six hours per movie, so reopening
 the same title is instant.
+
+Descriptions come from TMDB when credentials exist and from the Wikipedia page
+summary otherwise. If neither is available the dialog says so instead of
+breaking.
 
 - With TMDB credentials, cast and trailers come from TMDB first.
 - Without credentials, the app falls back to Bing video search (which links to
@@ -152,11 +172,44 @@ The score for each candidate movie is:
 45% content similarity
 20% rating quality
 10% popularity
-15% collaborative signal
+15% latent-factor personal match
 10% mood match
 ```
 
-Content similarity compares genre profiles of liked movies with the catalog. The collaborative signal finds MovieLens users with similar taste based on the movies you liked.
+Content similarity compares genre profiles of liked movies with the catalog. The personal match comes from a model (see below); when the model is unavailable it falls back to finding MovieLens users with similar taste based on the movies you liked.
+
+### The recommendation model
+
+`src/model.py` trains a biased matrix factorisation with a truncated SVD on
+`ratings.csv`:
+
+```text
+rating(user, movie) ≈ global mean + movie bias + user bias + user factors · movie factors
+```
+
+20 latent factors, trained in about 2.5 seconds and cached in the running app,
+so nothing has to be shipped as a model file. Your likes are folded into the
+latent space at recommendation time, which gives every deck a personal match
+score without needing an account.
+
+Evaluation uses a per-user holdout: the latest 20% of each user's ratings by
+timestamp (80,672 train / 20,164 test). Reproduce the numbers with:
+
+```bash
+python scripts/evaluate_model.py
+```
+
+| Ranking | Precision@10 |
+| --- | --- |
+| Popularity | 0.050 |
+| Rating quality + popularity | 0.055 |
+| Model (latent taste + quality) | 0.062 |
+
+For rating prediction the model reaches **RMSE 0.935 / MAE 0.713**, against
+1.069 for the global-mean baseline and 0.939 for movie and user biases alone.
+The Insights page shows the same metrics. Ranking by latent match alone is
+worse than popularity, because it ignores whether a movie is any good — which
+is why the app blends it with the quality prior instead.
 
 ### Random batches and no repeats
 

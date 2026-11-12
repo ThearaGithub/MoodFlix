@@ -1,10 +1,18 @@
 from pathlib import Path
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
 from src.data_loader import load_catalog, load_ratings
 from src.extras import get_movie_extras
+from src.model import (
+    model_metrics,
+    ranking_scores,
+    similarity_scores,
+    taste_match,
+    taste_scores,
+)
 from src.mood import MOOD_EMOJI, MOOD_GENRES
 from src.recommender import recommend
 from src.ui import (
@@ -12,7 +20,9 @@ from src.ui import (
     clickable_movie_card,
     inject_css,
     movie_card,
+    overview_block,
     poster_grid,
+    taste_meter,
     trailer_block,
 )
 
@@ -71,6 +81,67 @@ def movie_by_id(movie_id):
     return match.iloc[0] if not match.empty else None
 
 
+def model_bar_chart(values, axis_title, zero, highlight):
+    """Themed bar chart for the model metrics on the Insights page."""
+    frame = pd.DataFrame(
+        {
+            "label": list(values.keys()),
+            "value": list(values.values()),
+        }
+    )
+    frame["is_highlight"] = frame["label"] == highlight
+    base = alt.Chart(frame).encode(
+        x=alt.X("label:N", title=None, sort=None, axis=alt.Axis(labelAngle=0)),
+        y=alt.Y(
+            "value:Q",
+            title=axis_title,
+            scale=alt.Scale(zero=zero),
+            axis=alt.Axis(format=".3f"),
+        ),
+    )
+    bars = base.mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
+        color=alt.condition(
+            alt.datum.is_highlight,
+            alt.value("#e50914"),
+            alt.value("#6b1116"),
+        ),
+        tooltip=[
+            alt.Tooltip("label:N", title="Ranker"),
+            alt.Tooltip("value:Q", title=axis_title, format=".4f"),
+        ],
+    )
+    labels = base.mark_text(dy=-8, color="#f5f5f5", fontSize=11).encode(
+        text=alt.Text("value:Q", format=".3f")
+    )
+    return (bars + labels).properties(height=260)
+
+
+def may_like_picks(n=6, seed_movie_id=None):
+    """Movies ranked for the session user, excluding what is already handled.
+
+    With likes the score is personal (taste + quality); without them it falls
+    back to the latent similarity to ``seed_movie_id``.
+    """
+    scores = (
+        ranking_scores(catalog, st.session_state.liked)
+        if st.session_state.liked
+        else similarity_scores(catalog, seed_movie_id)
+        if seed_movie_id is not None
+        else None
+    )
+    if scores is None:
+        return None
+
+    skip = set(st.session_state.liked) | set(st.session_state.disliked)
+    if seed_movie_id is not None:
+        skip.add(int(seed_movie_id))
+    return (
+        catalog.assign(match=scores)
+        .loc[lambda frame: ~frame["movieId"].isin(skip)]
+        .nlargest(n, "match")
+    )
+
+
 def add_to_watchlist(movie_id):
     if movie_id not in st.session_state.watchlist:
         st.session_state.watchlist.append(movie_id)
@@ -92,6 +163,7 @@ def refresh_queue():
         n=20,
         exclude_ids=st.session_state.seen,
         randomize=True,
+        personal_scores=taste_scores(catalog, st.session_state.liked),
     )
     st.session_state.queue = recommendations["movieId"].tolist()
 
@@ -131,6 +203,15 @@ def show_movie_details(movie):
             year_value,
         )
 
+    overview_block(extras.get("overview"))
+
+    match = taste_match(movie["movieId"], st.session_state.liked)
+    if match is not None:
+        taste_meter(
+            match,
+            f"Model taste match · {len(st.session_state.liked)} liked",
+        )
+
     st.divider()
     st.subheader("Trailer")
     trailer_block(extras.get("trailer"))
@@ -153,6 +234,25 @@ def show_movie_details(movie):
             key=f"dialog_add_{movie_id}",
             on_click=add_to_watchlist,
             args=(movie_id,),
+        )
+
+    picks = may_like_picks(n=4, seed_movie_id=movie_id)
+    if picks is not None and not picks.empty:
+        st.divider()
+        st.subheader("You may like")
+        st.caption(
+            "Chosen by the recommendation model"
+            + (
+                " from your taste profile."
+                if st.session_state.liked
+                else " as movies with a similar latent signature."
+            )
+        )
+        poster_grid(
+            picks,
+            columns=4,
+            on_select=show_movie_details,
+            key_prefix=f"dialog_{movie_id}",
         )
 
 
@@ -189,6 +289,30 @@ if page == "Home":
     st.write("2. Like or pass movies in the Discover deck.")
     st.write("3. Save the winners and export your watchlist.")
     st.button("Start discovering", on_click=go_to, args=("Discover",))
+
+    st.divider()
+    st.subheader("You may like")
+    if not st.session_state.liked:
+        st.caption(
+            "Like a few movies in Discover and the recommendation model will "
+            "fill this row with movies that match your taste."
+        )
+    else:
+        picks = may_like_picks(n=6)
+        if picks is None or picks.empty:
+            st.caption("The recommendation model is not available right now.")
+        else:
+            st.caption(
+                "Picked by the recommendation model from the "
+                f"{len(st.session_state.liked)} movie"
+                f"{'s' if len(st.session_state.liked) != 1 else ''} you liked. "
+                "Click a poster for details."
+            )
+            poster_grid(
+                picks,
+                on_select=show_movie_details,
+                key_prefix="maylike",
+            )
 
 elif page == "Discover":
     st.title("Discover")
@@ -414,8 +538,97 @@ elif page == "Insights":
     st.subheader("How the score is built")
     st.write(
         "45% content similarity · 20% rating quality · 10% popularity · "
-        "15% collaborative signal · 10% mood match"
+        "15% latent-factor personal match · 10% mood match"
     )
+
+    st.subheader("Recommendation model")
+    st.caption(
+        "Biased matrix factorisation (truncated SVD, 20 latent factors) "
+        "trained on MovieLens ratings with a per-user holdout of the "
+        "latest 20% of ratings."
+    )
+    metrics = model_metrics()
+    if not metrics:
+        st.info("The recommendation model could not be trained on this dataset.")
+    else:
+        metric_cols = st.columns(3)
+        with metric_cols[0]:
+            st.metric(
+                "RMSE (model)",
+                f"{metrics['rmse_model']:.3f}",
+                delta=f"{metrics['rmse_model'] - metrics['rmse_baseline']:+.3f} vs mean",
+                delta_color="inverse",
+            )
+        with metric_cols[1]:
+            st.metric("MAE (model)", f"{metrics['mae_model']:.3f}")
+        with metric_cols[2]:
+            st.metric(
+                f"Precision@{metrics['k']}",
+                f"{metrics['precision_model']:.3f}",
+                delta=f"{metrics['precision_model'] - metrics['precision_popularity']:+.3f} vs popularity",
+            )
+
+        st.subheader("Model performance")
+        chart_cols = st.columns(2)
+        with chart_cols[0]:
+            st.caption("Rating error — lower is better")
+            st.altair_chart(
+                model_bar_chart(
+                    {
+                        "Global mean": metrics["rmse_baseline"],
+                        "Movie + user biases": metrics["rmse_item_bias"],
+                        "SVD model": metrics["rmse_model"],
+                    },
+                    "RMSE",
+                    zero=False,
+                    highlight="SVD model",
+                ),
+                use_container_width=True,
+            )
+        with chart_cols[1]:
+            st.caption(
+                f"Ranking quality — precision@{metrics['k']}, higher is better"
+            )
+            st.altair_chart(
+                model_bar_chart(
+                    {
+                        "Popularity": metrics["precision_popularity"],
+                        "Quality prior": metrics["precision_quality"],
+                        "Model + quality": metrics["precision_model"],
+                    },
+                    f"Precision@{metrics['k']}",
+                    zero=True,
+                    highlight="Model + quality",
+                ),
+                use_container_width=True,
+            )
+
+        st.dataframe(
+            pd.DataFrame(
+                {
+                    "Ranking baseline": [
+                        "Popularity",
+                        "Rating quality + popularity",
+                        "Model (latent taste + quality)",
+                    ],
+                    f"Precision@{metrics['k']}": [
+                        metrics["precision_popularity"],
+                        metrics["precision_quality"],
+                        metrics["precision_model"],
+                    ],
+                }
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+
+        st.caption(
+            f"Trained on {metrics['train_ratings']:,} ratings, tested on "
+            f"{metrics['test_ratings']:,} held-out ratings · "
+            f"{metrics['users']} users · {metrics['items']:,} movies · "
+            f"{metrics['factors']} latent factors. Item-bias-only baseline "
+            f"RMSE: {metrics['rmse_item_bias']:.3f}."
+        )
 
 elif page == "About":
     st.title("About MoodFlix")

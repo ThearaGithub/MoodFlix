@@ -15,13 +15,40 @@ def inject_css():
             font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
         }
 
+        /* Two red glows drift across the page. The layers use fixed
+           attachment so background-position is measured against the
+           viewport: percentage positions on the multi-thousand-pixel page
+           body barely move the gradient at all. */
         .stApp {
             background:
-                radial-gradient(1200px 720px at 12% -15%, rgba(229,9,20,.42), transparent 62%),
-                radial-gradient(950px 620px at 100% 0%, rgba(229,9,20,.28), transparent 58%),
-                linear-gradient(180deg, #140305 0%, #0d0203 45%, #080101 100%);
+                radial-gradient(540px 540px at 50% 50%, rgba(255,45,58,.5), rgba(255,45,58,0) 72%)
+                    no-repeat fixed 0px 0px / 980px 980px,
+                radial-gradient(460px 460px at 50% 50%, rgba(229,9,20,.42), rgba(229,9,20,0) 72%)
+                    no-repeat fixed calc(100% - 120px) 40px / 860px 860px,
+                radial-gradient(1100px 620px at 8% -10%, rgba(229,9,20,.34), transparent 64%)
+                    no-repeat fixed 0px 0px / 100% 100%,
+                linear-gradient(180deg, #170406 0%, #0d0203 45%, #080101 100%) fixed;
+            animation: mf-drift 24s ease-in-out infinite alternate;
             color: #f5f5f5;
             font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+        }
+
+        @keyframes mf-drift {
+            0% {
+                background-position: 0px 0px, calc(100% - 120px) 40px, 0 0, 0 0;
+            }
+            50% {
+                background-position: 260px 200px, calc(100% - 470px) 280px, 0 0, 0 0;
+            }
+            100% {
+                background-position: 120px 460px, calc(100% - 700px) 120px, 0 0, 0 0;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .stApp {
+                animation: none;
+            }
         }
 
         [data-testid="stSidebar"] {
@@ -303,6 +330,55 @@ def inject_css():
             margin-top: 4px;
         }
 
+        .mf-meter {
+            background: linear-gradient(160deg, rgba(229,9,20,.12), #170709);
+            border: 1px solid rgba(229,9,20,.28);
+            border-radius: 12px;
+            padding: 14px 18px 16px;
+            margin: 6px 0 14px;
+        }
+
+        .mf-meter-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            color: #f2d9da;
+            font-size: .85rem;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+        }
+
+        .mf-meter-head strong {
+            color: #ff4d57;
+            font-size: 1.5rem;
+            letter-spacing: 0;
+        }
+
+        .mf-meter-track {
+            margin-top: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,.08);
+            overflow: hidden;
+        }
+
+        .mf-meter-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #7a0510, #e50914 60%, #ff5c66);
+            box-shadow: 0 0 18px rgba(229,9,20,.6);
+            transition: width .4s ease;
+        }
+
+        .mf-overview {
+            color: #dcc4c6;
+            font-size: 1rem;
+            line-height: 1.7;
+            margin: 2px 0 16px;
+        }
+
         .mf-cast-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
@@ -427,7 +503,6 @@ def inject_css():
         unsafe_allow_html=True,
     )
 
-
 def movie_card(movie):
     title = escape(str(movie["title"]))
     genres = escape(str(movie["genres"]).replace("|", " · "))
@@ -478,6 +553,31 @@ def clickable_movie_card(movie, on_select, key_prefix="card"):
             on_select(movie)
 
 
+def overview_block(text):
+    """Render the plot summary paragraph."""
+    text = str(text or "").strip()
+    if not text:
+        st.caption("No description is available for this movie.")
+        return
+    st.markdown(
+        f'<div class="mf-overview">{escape(text)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def taste_meter(value, label="Model taste match"):
+    """Horizontal bar visualising a 0-1 model score."""
+    percent = max(0, min(100, int(round(float(value) * 100))))
+    st.markdown(
+        f'<div class="mf-meter"><div class="mf-meter-head">'
+        f"<span>{escape(str(label))}</span><strong>{percent}%</strong>"
+        f'</div><div class="mf-meter-track">'
+        f'<div class="mf-meter-fill" style="width:{percent}%"></div>'
+        f"</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
 def trailer_block(trailer):
     if not trailer or not trailer.get("key"):
         st.caption("Trailer not available for this movie.")
@@ -524,14 +624,13 @@ def cast_grid(cast):
             if safe_role
             else ""
         )
+        # Keep each card on a single line with no blank lines between
+        # cards: Markdown ends an HTML block at a blank line and would
+        # render the leftover indented markup as a code block.
         cards.append(
-            f"""
-            <div class="mf-cast-card">
-                {media}
-                <div class="mf-cast-name">{safe_name}</div>
-                {role_html}
-            </div>
-            """
+            f'<div class="mf-cast-card">{media}'
+            f'<div class="mf-cast-name">{safe_name}</div>'
+            f"{role_html}</div>"
         )
 
     if not cards:

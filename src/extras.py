@@ -266,6 +266,7 @@ def _tmdb_extras(tmdb_id: int | None) -> dict | None:
 
     return {
         "cast": cast,
+        "overview": str(data.get("overview", "") or "").strip(),
         "trailer": (
             {
                 "key": video["key"],
@@ -891,6 +892,34 @@ def _attach_photos(cast: list[dict]) -> list[dict]:
     return cast
 
 
+def _wikipedia_description(article: str | None) -> str:
+    """Short plot description from Wikipedia's page summary endpoint."""
+    if not article:
+        return ""
+    slug = urllib.parse.quote(str(article).replace(" ", "_"), safe="")
+    try:
+        data = _get_json(
+            f"https://en.wikipedia.org/api/rest_v1/page/summary/{slug}",
+            attempts=1,
+        )
+    except Exception:
+        return ""
+    extract = str(data.get("extract", "") or "").strip()
+    extract = re.sub(r"\s+", " ", extract)
+    if len(extract) > 700:
+        extract = extract[:697].rsplit(" ", 1)[0] + "…"
+    return extract
+
+
+def _web_description(
+    title: str, year: int | None, imdb_id: str
+) -> str:
+    article, _ = _wikidata_cast(imdb_id)
+    if not article:
+        article = _wikipedia_search(title, year)
+    return _wikipedia_description(article)
+
+
 def _web_cast(
     title: str, year: int | None, imdb_id: str
 ) -> list[dict]:
@@ -911,9 +940,12 @@ def _web_cast(
 def _web_extras(
     title: str, year: int | None, imdb_id: str
 ) -> dict:
-    executor = ThreadPoolExecutor(max_workers=2)
+    executor = ThreadPoolExecutor(max_workers=3)
     cast_future = executor.submit(_web_cast, title, year, imdb_id)
     trailer_future = executor.submit(_find_trailer, title, year)
+    description_future = executor.submit(
+        _web_description, title, year, imdb_id
+    )
     deadline = time.monotonic() + 25
 
     try:
@@ -928,12 +960,19 @@ def _web_extras(
         )
     except Exception:
         trailer = None
+    try:
+        overview = description_future.result(
+            timeout=max(0.1, deadline - time.monotonic())
+        )
+    except Exception:
+        overview = ""
     finally:
         # Never block the dialog on a slow background request.
         executor.shutdown(wait=False)
 
     return {
         "cast": cast,
+        "overview": overview,
         "trailer": trailer,
         "source": "web",
     }
@@ -962,8 +1001,11 @@ def get_movie_extras(
     tmdb_extras = _tmdb_extras(tmdb_id)
     web_extras = None
 
-    if not tmdb_extras or not tmdb_extras.get("cast") or not tmdb_extras.get(
-        "trailer"
+    if (
+        not tmdb_extras
+        or not tmdb_extras.get("cast")
+        or not tmdb_extras.get("trailer")
+        or not tmdb_extras.get("overview")
     ):
         try:
             web_extras = _web_extras(
@@ -977,6 +1019,13 @@ def get_movie_extras(
             tmdb_extras["cast"] = web_extras["cast"]
         if not tmdb_extras.get("trailer") and web_extras:
             tmdb_extras["trailer"] = web_extras["trailer"]
+        if not tmdb_extras.get("overview") and web_extras:
+            tmdb_extras["overview"] = web_extras.get("overview", "")
         return tmdb_extras
 
-    return web_extras or {"cast": [], "trailer": None, "source": "none"}
+    return web_extras or {
+        "cast": [],
+        "overview": "",
+        "trailer": None,
+        "source": "none",
+    }

@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .streamlit/secrets.toml
 data/*.zip
+data/model_metrics.json
+.freebuff/
