@@ -25,7 +25,13 @@ MoodFlix learns from the movies you like, blends content similarity, rating qual
 
 ## Preview
 
-![MoodFlix demo](assets/preview.gif)
+![MoodFlix demo: Home, Discover, the recommendation model and catalog analytics](assets/preview.gif)
+
+The loop walks through the four pages that matter: **Home** (catalog stats and the
+"You may like" row), **Discover** (mood picker, the optional camera panel, and the
+swipe card), **Model insights** (the recommendation model's measured error and
+ranking quality) and the catalog charts. Stills live in `assets/`:
+`home.png`, `discover.png`, `model.png`, `insights.png`.
 
 ## Tech Stack
 
@@ -51,6 +57,7 @@ MoodFlix/
 │   ├── preview.gif
 │   ├── home.png
 │   ├── discover.png
+│   ├── model.png
 │   └── insights.png
 ├── data/
 │   ├── movies.csv
