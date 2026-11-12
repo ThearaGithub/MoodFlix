@@ -43,8 +43,11 @@ EMOTION_EMOJI = {
     "neutral": "😐",
 }
 
+# Moods the camera can never suggest: a face carries no "romantic" or
+# "nostalgic" signal. The other six are reachable (disgust maps to
+# Thoughtful, anger and surprise both map to Excited).
 CAMERA_MOODS = sorted(set(EMOTION_TO_MOOD.values()))
-MANUAL_ONLY_MOODS = ["Romantic", "Nostalgic", "Thoughtful"]
+MANUAL_ONLY_MOODS = ["Romantic", "Nostalgic"]
 
 INSTALL_HINT = (
     "Camera mood detection needs the optional extras. Run "

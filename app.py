@@ -383,8 +383,10 @@ elif page == "Discover":
                         args=(suggestion["mood"],),
                     )
                     st.caption(
-                        "Expressions map onto 6 of the 8 moods. Romantic and "
-                        "Nostalgic have no facial signal — pick those above."
+                        f"Expressions map onto {len(vision.CAMERA_MOODS)} of the "
+                        f"{len(MOOD_GENRES)} moods. "
+                        f"{' and '.join(vision.MANUAL_ONLY_MOODS)} have no facial "
+                        "signal — pick those above."
                     )
 
     if not st.session_state.queue:
