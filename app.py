@@ -13,6 +13,7 @@ from src.model import (
     taste_match,
     taste_scores,
 )
+from src import vision
 from src.mood import MOOD_EMOJI, MOOD_GENRES
 from src.recommender import recommend
 from src.ui import (
@@ -169,6 +170,12 @@ def refresh_queue():
 
 
 def reset_queue():
+    st.session_state.queue = []
+
+
+def set_mood(mood):
+    """Apply a mood picked outside the radio (e.g. the camera detector)."""
+    st.session_state.mood = mood
     st.session_state.queue = []
 
 
@@ -330,6 +337,55 @@ elif page == "Discover":
         format_func=lambda mood: f"{MOOD_EMOJI[mood]} {mood}",
         on_change=reset_queue,
     )
+
+    with st.expander("📷 Detect my mood from a photo"):
+        st.caption(
+            "One photo is read on this machine to guess your expression and "
+            "preselect a mood. The image is never stored, uploaded, or kept "
+            "after the guess. The mood buttons above always win."
+        )
+        if not vision.is_available():
+            st.info(vision.INSTALL_HINT)
+        else:
+            photo = st.camera_input("Look at the camera", key="mood_photo")
+            if photo is not None:
+                with st.spinner("Reading your expression…"):
+                    try:
+                        suggestion = vision.suggest_mood(photo.getvalue())
+                    except vision.VisionUnavailable:
+                        st.info(vision.INSTALL_HINT)
+                        suggestion = None
+                    except vision.VisionError as exc:
+                        st.warning(str(exc))
+                        suggestion = None
+
+                if suggestion:
+                    taste_meter(
+                        suggestion["confidence"],
+                        f"{suggestion['emoji']} Looks {suggestion['emotion']}",
+                    )
+                    st.write(
+                        f"Suggested mood: {MOOD_EMOJI[suggestion['mood']]} "
+                        f"**{suggestion['mood']}**"
+                    )
+                    runner_up = suggestion.get("runner_up")
+                    if runner_up:
+                        st.caption(
+                            "Second guess: "
+                            f"{MOOD_EMOJI[runner_up['mood']]} "
+                            f"{runner_up['mood']} "
+                            f"({runner_up['confidence'] * 100:.0f}%)"
+                        )
+                    st.button(
+                        f"Use {suggestion['mood']}",
+                        key="use_camera_mood",
+                        on_click=set_mood,
+                        args=(suggestion["mood"],),
+                    )
+                    st.caption(
+                        "Expressions map onto 6 of the 8 moods. Romantic and "
+                        "Nostalgic have no facial signal — pick those above."
+                    )
 
     if not st.session_state.queue:
         refresh_queue()
@@ -655,4 +711,10 @@ elif page == "About":
     st.info(
         "Recommendations are suggestions, not judgments. The app does not collect "
         "personal data; likes and watchlists live only in your current session."
+    )
+    st.caption(
+        "Optional camera mood detection reads a single photo on this machine "
+        "to guess an expression. The image is deleted immediately, never "
+        "uploaded or saved, and the feature is off unless you open it. It is a "
+        "guess, not a diagnosis, and the manual mood buttons always override it."
     )

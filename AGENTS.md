@@ -9,6 +9,7 @@ MoodFlix is a single-page Streamlit app. `app.py` is the only entrypoint and con
 - Health check: `(Invoke-WebRequest http://localhost:8501/_stcore/health).Content` should return `ok`.
 - If port 8501 already returns `ok`, reuse that server. After changing `src/`, restart it; Streamlit may keep imported modules cached.
 - There is no test suite, linter, typechecker, or lockfile. Syntax-check with `python -m compileall -q app.py src scripts`.
+- Webcam mood detection is optional; install `requirements-vision.txt` to enable it (large TensorFlow download). Without it the Discover panel shows an install hint and everything else works.
 - UI regression checks use `streamlit.testing.v1.AppTest`. AppTest cannot click widgets inside `st.dialog`, and YouTube embeds are read with `at.get("video")`, not `at.video`.
 
 ## Architecture
@@ -24,6 +25,13 @@ MoodFlix is a single-page Streamlit app. `app.py` is the only entrypoint and con
 - The animated background is three fixed-attachment background layers on `.stApp` whose `background-position` is animated (`mf-drift`). Two things to keep in mind: positions must stay in `px`/`calc()` because percentage positions resolve against the multi-thousand-pixel page body and visibly do not move; and separate glow `<div>`s with `z-index: -1` render *behind* `.stApp`'s own background, so they are not an option. One static red layer stays put so the page never goes black mid-cycle. `prefers-reduced-motion` disables the animation.
 - `src/ui.py` also provides `overview_block()` (plot paragraph), `taste_meter()` (red 0-100 bar for the model score), `movie_card()`, `clickable_movie_card()`, `poster_grid()`, `trailer_block()`, and `cast_grid()`. When building HTML for `st.markdown`, keep each block on a single line with no blank lines: Markdown ends an HTML block at a blank line and renders the rest as a code block (this is what once broke the cast grid).
 - Navigation, likes, watchlist, queue, and seen history are all session-only (`st.session_state`); there is no database or account system.
+
+## Camera mood detection
+
+- `src/vision.py` is optional: it imports DeepFace lazily, so the app and `requirements.txt` stay light. The camera panel on Discover checks `is_available()` (cached with `lru_cache`) and shows `INSTALL_HINT` when `requirements-vision.txt` is not installed. Do not move DeepFace into `requirements.txt` or import it at module scope.
+- `suggest_mood()` maps the top emotion onto a mood via `EMOTION_TO_MOOD`; `Romantic`, `Nostalgic`, and `Thoughtful` do not come from faces. The manual mood radio is the source of truth: the camera only offers a `Use <mood>` button whose callback (`set_mood()`) sets `session_state.mood` and clears the queue. Never set `session_state.mood` after the radio widget is instantiated — use the callback.
+- Privacy contract: the frame goes to a temp file only because DeepFace takes a path, and that file is deleted in `finally`. Nothing is uploaded, cached, or kept in `session_state`; keep it that way and keep the About/README wording accurate.
+- `st.camera_input` cannot be exercised from `AppTest` and needs a real webcam plus `localhost`/HTTPS, so a UI regression test only covers the install-hint branch. Verify the camera path by hand.
 
 ## Extras and external APIs
 

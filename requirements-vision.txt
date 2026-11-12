@@ -1,0 +1,6 @@
+# Optional extras for webcam mood detection (Discover page).
+# The core app runs without these; install them only if you want the camera.
+#   pip install -r requirements-vision.txt
+deepface
+opencv-python-headless
+tf-keras

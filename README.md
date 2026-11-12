@@ -8,6 +8,7 @@ MoodFlix learns from the movies you like, blends content similarity, rating qual
 
 - Netflix-style dark theme with a custom MoodFlix logo and a slowly drifting red gradient background
 - Mood-based discovery across 8 moods (Happy, Excited, Relaxed, Romantic, Thoughtful, Scared, Nostalgic, Sad)
+- Optional camera mood detection: take one photo and the app suggests a mood
 - Swipe-style Like / Pass deck
 - Randomized recommendation batches: every new batch is sampled from the best candidates, so the same movie does not come up every time
 - No repeats within a session — movies already shown, liked, or passed are excluded from later batches
@@ -61,13 +62,15 @@ MoodFlix/
 │   ├── download_data.py
 │   ├── evaluate_model.py
 │   └── fetch_posters.py
+├── requirements-vision.txt
 └── src/
     ├── data_loader.py
     ├── extras.py
     ├── model.py
     ├── mood.py
     ├── recommender.py
-    └── ui.py
+    ├── ui.py
+    └── vision.py
 ```
 
 ## Setup
@@ -134,6 +137,35 @@ genre. Every match is displayed as a poster tile; results are paginated
 fully browsable. Clicking any poster opens a movie-details dialog with the
 poster, rating, genres, tags, an embedded trailer, top-billed cast (with
 photos when available), and an **Add to watchlist** button.
+
+## Camera Mood Detection (optional)
+
+The Discover page has a **Detect my mood from a photo** panel. Take one photo
+with your webcam and a pre-trained facial-expression classifier
+([DeepFace](https://github.com/serengil/deepface)) guesses your expression,
+shows the confidence, and suggests a mood. You stay in control: the mood
+buttons always override the guess, and the feature is collapsed and off until
+you open it.
+
+The camera needs the optional extras:
+
+```bash
+pip install -r requirements-vision.txt
+```
+
+That pulls in TensorFlow, so it is a large download (roughly 600 MB) and is
+kept out of `requirements.txt`; the app runs normally without it and the panel
+shows an install hint instead.
+
+Expressions map onto six of the eight moods: happy to Happy, surprise and
+anger to Excited, fear to Scared, disgust to Thoughtful, sadness to Sad, and
+neutral to Relaxed. Romantic and Nostalgic have no facial signal, so they stay
+manual.
+
+**Privacy:** the photo is analysed on your machine, deleted immediately, and
+never uploaded or stored. Accuracy is a guess, not a diagnosis — webcam
+lighting and head angle change the result, which is why the manual picker is
+always there.
 
 ## You May Like
 
