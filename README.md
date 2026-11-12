@@ -144,8 +144,10 @@ The Discover page has a **Detect my mood from a photo** panel. Take one photo
 with your webcam and a pre-trained facial-expression classifier
 ([DeepFace](https://github.com/serengil/deepface)) guesses your expression,
 shows the confidence, and suggests a mood. You stay in control: the mood
-buttons always override the guess, and the feature is collapsed and off until
-you open it.
+buttons always override the guess. The panel is open by default, so the
+browser asks for camera access when Discover loads — nothing is captured or
+analysed until you press **Take Photo**, and denying access leaves the rest of
+the page fully usable.
 
 The camera needs the optional extras:
 

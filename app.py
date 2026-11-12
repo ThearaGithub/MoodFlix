@@ -338,11 +338,13 @@ elif page == "Discover":
         on_change=reset_queue,
     )
 
-    with st.expander("📷 Detect my mood from a photo"):
+    with st.expander("📷 Detect my mood from a photo", expanded=True):
         st.caption(
-            "One photo is read on this machine to guess your expression and "
-            "preselect a mood. The image is never stored, uploaded, or kept "
-            "after the guess. The mood buttons above always win."
+            "The browser asks for camera access when this page opens, but "
+            "nothing is captured or analysed until you press Take Photo. The "
+            "photo is read on this machine to guess your expression, then "
+            "deleted — never stored or uploaded. The mood buttons above "
+            "always win."
         )
         if not vision.is_available():
             st.info(vision.INSTALL_HINT)
@@ -716,7 +718,8 @@ elif page == "About":
     )
     st.caption(
         "Optional camera mood detection reads a single photo on this machine "
-        "to guess an expression. The image is deleted immediately, never "
-        "uploaded or saved, and the feature is off unless you open it. It is a "
-        "guess, not a diagnosis, and the manual mood buttons always override it."
+        "to guess an expression. Access is only requested on the Discover page "
+        "and nothing is captured until you take a photo; the image is deleted "
+        "immediately, never uploaded or saved. It is a guess, not a diagnosis, "
+        "and the manual mood buttons always override it."
     )
