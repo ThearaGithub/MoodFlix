@@ -7,7 +7,14 @@ from src.data_loader import load_catalog, load_ratings
 from src.extras import get_movie_extras
 from src.mood import MOOD_EMOJI, MOOD_GENRES
 from src.recommender import recommend
-from src.ui import cast_grid, inject_css, movie_card, poster_grid, trailer_block
+from src.ui import (
+    cast_grid,
+    clickable_movie_card,
+    inject_css,
+    movie_card,
+    poster_grid,
+    trailer_block,
+)
 
 LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.jpe"
 
@@ -217,7 +224,11 @@ elif page == "Discover":
             st.session_state.queue.pop(0)
             st.rerun()
 
-        movie_card(movie)
+        clickable_movie_card(
+            movie,
+            on_select=show_movie_details,
+            key_prefix="discover",
+        )
 
         like_col, pass_col, refresh_col = st.columns([1, 1, 2])
         with like_col:

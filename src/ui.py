@@ -363,14 +363,22 @@ def inject_css():
             position: relative;
         }
 
-        [class*="st-key-mfposter_"] div.stButton {
+        /* Streamlit gives each button its own position:relative wrapper,
+           so the wrapper (not just div.stButton) must be overlaid. */
+        [class*="st-key-mfposter_"] > div[data-testid="stElementContainer"]:has(> div.stButton) {
             position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
+            width: 100% !important;
             aspect-ratio: 2 / 3;
             margin: 0;
             z-index: 6;
+        }
+
+        [class*="st-key-mfposter_"] div.stButton {
+            width: 100%;
+            height: 100%;
+            margin: 0;
         }
 
         [class*="st-key-mfposter_"] div.stButton > button {
@@ -379,6 +387,37 @@ def inject_css():
             padding: 0;
             border: none;
             border-radius: 12px;
+            background: transparent;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* Invisible click layer across the full feature card on Discover */
+        [class*="st-key-mfcard_"] {
+            position: relative;
+        }
+
+        [class*="st-key-mfcard_"] > div[data-testid="stElementContainer"]:has(> div.stButton) {
+            position: absolute;
+            inset: 0;
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0;
+            z-index: 6;
+        }
+
+        [class*="st-key-mfcard_"] div.stButton {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+        }
+
+        [class*="st-key-mfcard_"] div.stButton > button {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            border: none;
+            border-radius: 16px;
             background: transparent;
             opacity: 0;
             cursor: pointer;
@@ -425,6 +464,18 @@ def movie_card(movie):
         """,
         unsafe_allow_html=True,
     )
+
+
+def clickable_movie_card(movie, on_select, key_prefix="card"):
+    """Render the feature card with an invisible details click layer."""
+    movie_id = int(movie["movieId"])
+    with st.container(key=f"mfcard_{key_prefix}_{movie_id}"):
+        movie_card(movie)
+        if st.button(
+            "View details",
+            key=f"{key_prefix}_card_open_{movie_id}",
+        ):
+            on_select(movie)
 
 
 def trailer_block(trailer):
