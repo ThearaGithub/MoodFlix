@@ -73,10 +73,7 @@ def is_available() -> bool:
     fail at detection time. The answer is cached for the life of the
     process, so restart the app after installing the extras.
     """
-    return all(
-        importlib.util.find_spec(name) is not None
-        for name in ("deepface", "tensorflow")
-    )
+    return importlib.util.find_spec("deepface") is not None
 
 
 def _load_deepface():
