@@ -634,11 +634,12 @@ def clickable_movie_card(movie, on_select, key_prefix="card"):
     movie_id = int(movie["movieId"])
     with st.container(key=f"mfcard_{key_prefix}_{movie_id}"):
         movie_card(movie)
-        if st.button(
+        st.button(
             "View details",
             key=f"{key_prefix}_card_open_{movie_id}",
-        ):
-            on_select(movie)
+            on_click=on_select,
+            args=(movie,),
+        )
 
 
 def overview_block(text):
@@ -867,8 +868,13 @@ def poster_grid(movies, columns=6, on_select=None, key_prefix="tile"):
             with col:
                 with st.container(key=f"mfposter_{key_prefix}_{movie_id}"):
                     _poster_tile(movie)
-                    if on_select is not None and st.button(
-                        "View details",
-                        key=f"{key_prefix}_open_{movie_id}",
-                    ):
-                        on_select(movie)
+                    if on_select is not None:
+                        # on_click (rather than checking the return value)
+                        # so the target movie is stored *before* the rerun
+                        # re-renders the details dialog it was clicked in.
+                        st.button(
+                            "View details",
+                            key=f"{key_prefix}_open_{movie_id}",
+                            on_click=on_select,
+                            args=(movie,),
+                        )

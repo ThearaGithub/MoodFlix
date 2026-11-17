@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import html
 import json
-import math
 import os
 import re
 import ssl
@@ -23,6 +22,7 @@ import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -66,6 +66,10 @@ _BING_CARD_RE = re.compile(
     r'mmeta="([^"]+)"(?:(?!mmeta=").)*?aria-label="([^"]+)"',
     re.S,
 )
+# Bing renders this heading when it has nothing for the query, then fills
+# the page with trending videos. Those cards carry no relation to the query
+# at all, so treating them as results would block the YouTube fallback.
+_BING_NO_RESULTS_RE = re.compile(r"There are no results for")
 
 _TRAILER_BAD_WORDS = (
     "reaction",
@@ -413,6 +417,88 @@ def _normalise(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+# Words that may sit right beside a movie title inside a video title
+# without pointing at a different film: trailer formats and quality tags.
+_TRAILER_NEIGHBOURS = frozenset({
+    "official", "trailer", "teaser", "teasers", "hd", "4k", "1080p",
+    "720p", "full", "movie", "film", "new", "final", "original",
+    "extended", "remastered", "unrated", "redband", "greenband",
+    "announcement", "preview", "promo",
+})
+
+
+def _is_release_year(token: str) -> bool:
+    """True for a four-digit release year such as ``1999``."""
+    return bool(re.fullmatch(r"(?:19|20)\d{2}", token))
+
+
+def _title_spans(
+    video_tokens: list[str], movie_tokens: list[str]
+) -> Iterator[tuple[int, int]]:
+    """Yield ``(start, end)`` spans of ``video_tokens`` holding the title.
+
+    Stop words ("the", "of", ...) may sit between the movie's own words,
+    so "The Matrix" still matches "Matrix Official Trailer", but any other
+    word breaks the run -- which is what separates "The Matrix" from
+    "The Matrix Revolutions".
+    """
+    required = [
+        token for token in movie_tokens if token not in _STOP_WORDS
+    ] or movie_tokens
+    for start in range(len(video_tokens)):
+        index = start
+        matched = 0
+        while index < len(video_tokens) and matched < len(required):
+            token = video_tokens[index]
+            if token == required[matched]:
+                matched += 1
+                index += 1
+            elif token in _STOP_WORDS:
+                index += 1
+            else:
+                break
+        else:
+            if matched == len(required):
+                yield start, index
+
+
+def _title_sits_alone(
+    video_tokens: list[str], span: tuple[int, int], year: int | None
+) -> bool:
+    """True when only trailer boilerplate surrounds the movie title.
+
+    Content words in front ("Any One of Us") or behind ("Up in the Air",
+    "Frozen II", "Blade Runner 2049") mean the video is about a different
+    film, so the candidate is rejected instead of merely scored down.
+    """
+    start, end = span
+    for token in video_tokens[:start]:
+        if (
+            len(token) <= 1
+            or token in _STOP_WORDS
+            or token in _TRAILER_NEIGHBOURS
+        ):
+            continue
+        # A year in front only counts when it is this film's own year.
+        if _is_release_year(token) and (
+            year is None or token == str(year)
+        ):
+            continue
+        return False
+
+    for token in video_tokens[end:]:
+        if token in _STOP_WORDS:
+            continue
+        if token in _TRAILER_NEIGHBOURS:
+            return True
+        # A year only counts when it is this film's own year, otherwise a
+        # sequel such as "Blade Runner 2049" would pass for 1982.
+        return _is_release_year(token) and (
+            year is None or token == str(year)
+        )
+    return True
+
+
 def _extract_video_renderers(data: dict) -> list[dict]:
     found: list[dict] = []
     stack = [data]
@@ -534,6 +620,11 @@ def _bing_video_search(query: str) -> list[dict]:
         total_timeout=BING_TOTAL_TIMEOUT,
     )
 
+    if _BING_NO_RESULTS_RE.search(page):
+        # Bing had nothing for this query and substituted trending videos.
+        # Report "no results" rather than those unrelated cards.
+        return []
+
     found: list[dict] = []
     seen = set()
     for raw_meta, aria_label in _BING_CARD_RE.findall(page):
@@ -562,26 +653,33 @@ def _bing_video_search(query: str) -> list[dict]:
 
 
 def _score_trailer(video_title: str, movie_title: str, year: int | None) -> int:
+    """Score how likely ``video_title`` is this movie's own trailer.
+
+    The movie title must appear as a contiguous run of its own words
+    (stop words such as "the" may sit in between) with nothing but trailer
+    boilerplate or this film's release year beside it. Anything else --
+    "Any One of Us" for "Us", "Up in the Air" for "Up", "Frozen II" for
+    "Frozen" -- scores ``-100`` so a wrong film can never win the search.
+    """
     video = _normalise(video_title)
     movie = _normalise(movie_title)
     if not video or not movie:
         return -100
+    if any(word in video for word in _TRAILER_REJECT_WORDS):
+        return -100
 
+    video_tokens = video.split()
+    movie_tokens = movie.split()
     tokens = [
         token
-        for token in movie.split()
+        for token in movie_tokens
         if len(token) > 1 and token not in _STOP_WORDS
     ]
-    matched = sum(1 for token in tokens if token in video)
-    if tokens:
-        required = (
-            len(tokens)
-            if len(tokens) <= 3
-            else max(2, math.ceil(len(tokens) * 0.6))
-        )
-        if matched < required:
-            return -100
-    if any(word in video for word in _TRAILER_REJECT_WORDS):
+
+    spans = list(_title_spans(video_tokens, movie_tokens))
+    if not any(
+        _title_sits_alone(video_tokens, span, year) for span in spans
+    ):
         return -100
 
     score = 0
@@ -599,12 +697,8 @@ def _score_trailer(video_title: str, movie_title: str, year: int | None) -> int:
     if "official" in video:
         score += 2
     if tokens:
-        score += round(6 * matched / len(tokens))
-
-    # A sequel/remake such as "Toy Story 5" must not win a search for the
-    # original "Toy Story (1995)".
-    if re.search(rf"\b{re.escape(movie)}\s+\d{{1,2}}\b", video):
-        score -= 10
+        # The span check above already required every word of the title.
+        score += 6
 
     for word in _TRAILER_BAD_WORDS:
         if word in video:
@@ -635,16 +729,11 @@ def _find_trailer(title: str, year: int | None) -> dict | None:
     else:
         queries.append((variants[0], f"{variants[0]} trailer"))
 
-    bing_returned_results = False
-    bing_failed = False
     for variant, query in queries[:3]:
         try:
             videos = _bing_video_search(query)
         except Exception:
             videos = []
-            bing_failed = True
-        if videos:
-            bing_returned_results = True
         for video in videos:
             score = _score_trailer(video["title"], variant, year)
             if score > best_score:
@@ -653,10 +742,15 @@ def _find_trailer(title: str, year: int | None) -> dict | None:
         if best_score >= 6:
             break
 
-    # Bing has results but none of them look like this movie's trailer,
-    # which usually means no trailer exists. Avoid a slow YouTube retry for
-    # unknown titles and only fall back when Bing itself failed.
-    if best_score < 6 and (not bing_returned_results or bing_failed):
+    # Bing's video results have become unreliable: for many queries it
+    # serves trending videos unrelated to the search, and even when the
+    # results do mention the movie they are usually shorts, explainers or
+    # reaction clips rather than a trailer. So "Bing returned *something*"
+    # is not evidence that no trailer exists -- only a result that actually
+    # scores as a trailer (>= 6) ends the search. Otherwise retry on
+    # YouTube, bounded by YOUTUBE_TOTAL_TIMEOUT; the whole lookup is then
+    # cached for 6 hours by get_movie_extras().
+    if best_score < 6:
         for variant, query in queries[:2]:
             try:
                 videos = _youtube_search(query)

@@ -213,7 +213,8 @@ breaking.
 
 - With TMDB credentials, cast and trailers come from TMDB first.
 - Without credentials, the app falls back to Bing video search (which links to
-  YouTube trailers) and Wikipedia/Wikidata for the cast.
+  YouTube trailers), retries YouTube search directly when Bing has no usable
+  result, and reads cast information from Wikipedia/Wikidata.
 - If a trailer or cast list is unavailable, the dialog shows a friendly
   fallback instead of an error.
 - **Where to watch** groups providers into Stream, Free, Free with ads, Rent,

@@ -65,6 +65,8 @@ if "search_key" not in st.session_state:
     st.session_state.search_key = ""
 if "mood" not in st.session_state:
     st.session_state.mood = "Happy"
+if "details_movie_id" not in st.session_state:
+    st.session_state.details_movie_id = None
 
 
 try:
@@ -181,7 +183,15 @@ def set_mood(mood):
 
 
 @st.dialog("Movie details", width="large")
-def show_movie_details(movie):
+def show_movie_details():
+    # The dialog reads its movie from session state instead of an argument
+    # because a dialog cannot open another dialog: clicking a poster inside
+    # this one updates `details_movie_id` and the rerun renders that movie.
+    movie = movie_by_id(st.session_state.get("details_movie_id"))
+    if movie is None:
+        st.caption("This movie is no longer available.")
+        return
+
     movie_card(movie)
 
     year_value = movie.get("year")
@@ -262,9 +272,26 @@ def show_movie_details(movie):
         poster_grid(
             picks,
             columns=4,
-            on_select=show_movie_details,
+            on_select=select_dialog_movie,
             key_prefix=f"dialog_{movie_id}",
         )
+
+
+def open_movie_details(movie):
+    """Open the details dialog for a poster clicked outside it."""
+    st.session_state.details_movie_id = int(movie["movieId"])
+    show_movie_details()
+
+
+def select_dialog_movie(movie):
+    """Swap the already-open details dialog to the clicked movie.
+
+    Calling ``show_movie_details()`` here would raise
+    ``StreamlitInvalidLayoutContextError`` because dialogs cannot nest.
+    This runs as the poster button's ``on_click`` callback, so the id is
+    stored before the dialog's fragment reruns and renders the new movie.
+    """
+    st.session_state.details_movie_id = int(movie["movieId"])
 
 
 with st.sidebar:
@@ -321,7 +348,7 @@ if page == "Home":
             )
             poster_grid(
                 picks,
-                on_select=show_movie_details,
+                on_select=open_movie_details,
                 key_prefix="maylike",
             )
 
@@ -414,7 +441,7 @@ elif page == "Discover":
 
         clickable_movie_card(
             movie,
-            on_select=show_movie_details,
+            on_select=open_movie_details,
             key_prefix="discover",
         )
 
@@ -503,7 +530,7 @@ elif page == "Search":
         st.caption("Click any movie poster to see its full details.")
         poster_grid(
             page_results,
-            on_select=show_movie_details,
+            on_select=open_movie_details,
             key_prefix="search",
         )
 
