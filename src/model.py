@@ -224,6 +224,12 @@ def train(ratings: pd.DataFrame) -> dict:
         "user_ids": users,
         "user_bias": user_bias,
         "factors": factors,
+        # Kept for the Insights scatter: every held-out rating and the
+        # model's guess for it, so the error is visible, not just summarised.
+        "holdout": {
+            "actual": actual,
+            "predicted": model_prediction,
+        },
         "metrics": {
             "rmse_baseline": _rmse(actual, np.full_like(actual, mu)),
             "rmse_item_bias": _rmse(actual, bias_prediction),

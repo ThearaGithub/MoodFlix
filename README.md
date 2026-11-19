@@ -271,7 +271,9 @@ python scripts/evaluate_model.py
 
 For rating prediction the model reaches **RMSE 0.935 / MAE 0.713**, against
 1.069 for the global-mean baseline and 0.939 for movie and user biases alone.
-The Insights page shows the same metrics. Ranking by latent match alone is
+The Insights page shows the same metrics, plus a predicted-vs-actual scatter of
+the held-out ratings so the model's error is visible, not just summarised.
+Ranking by latent match alone is
 worse than popularity, because it ignores whether a movie is any good — which
 is why the app blends it with the quality prior instead.
 

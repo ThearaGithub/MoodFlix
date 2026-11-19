@@ -178,6 +178,41 @@ def model_bar_chart(values, axis_title, zero, highlight):
     return (bars + labels).properties(height=260)
 
 
+def model_scatter_chart(actual, predicted, limit=2000):
+    """Held-out ratings against the model's guesses, with a perfect-fit line."""
+    frame = pd.DataFrame({"actual": actual, "predicted": predicted})
+    if len(frame) > limit:
+        frame = frame.sample(limit, random_state=0)
+    diagonal = pd.DataFrame({"actual": [0.5, 5.0], "predicted": [0.5, 5.0]})
+    points = (
+        alt.Chart(frame)
+        .mark_circle(size=8, opacity=0.35, color="#e50914")
+        .encode(
+            x=alt.X(
+                "actual:Q",
+                title="Actual rating",
+                scale=alt.Scale(domain=[0.5, 5]),
+                axis=alt.Axis(values=[1, 2, 3, 4, 5]),
+            ),
+            y=alt.Y(
+                "predicted:Q",
+                title="Predicted rating",
+                scale=alt.Scale(domain=[0.5, 5]),
+            ),
+            tooltip=[
+                alt.Tooltip("actual:Q", title="Actual", format=".1f"),
+                alt.Tooltip("predicted:Q", title="Predicted", format=".2f"),
+            ],
+        )
+    )
+    perfect = (
+        alt.Chart(diagonal)
+        .mark_line(color="#f5f5f5", strokeDash=[4, 4])
+        .encode(x="actual:Q", y="predicted:Q")
+    )
+    return (points + perfect).properties(height=320)
+
+
 def may_like_picks(n=6, seed_movie_id=None):
     """Movies ranked for the session user, excluding what is already handled.
 
@@ -781,6 +816,19 @@ elif page == "Insights":
             width="stretch",
             hide_index=True,
         )
+
+        holdout = get_model().get("holdout")
+        if holdout is not None:
+            st.subheader("Predicted vs actual")
+            st.caption(
+                "Each dot is one held-out rating; the dashed line is a perfect "
+                "prediction. The tighter the cloud hugs the line, the better "
+                "the model's star guess."
+            )
+            st.altair_chart(
+                model_scatter_chart(holdout["actual"], holdout["predicted"]),
+                use_container_width=True,
+            )
 
         st.caption(
             f"Trained on {metrics['train_ratings']:,} ratings, tested on "
