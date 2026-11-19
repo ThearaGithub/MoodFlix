@@ -591,6 +591,100 @@ def inject_css():
         unsafe_allow_html=True,
     )
 
+
+def scroll_dialog_to_top(movie_id):
+    """Add a floating "Top" button and scroll the dialog to its movie card.
+
+    The script only re-runs when its body changes, so embedding the movie id
+    makes a new movie jump to the top while a same-movie rerun (for example
+    after adding it to the watchlist) leaves the reader in place.
+    """
+    movie_id = int(movie_id)
+    st.html(
+        f"""
+        <style>
+        #mf-top-button {{
+            position: fixed;
+            z-index: 2147483000;
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            border: 1px solid rgba(255, 255, 255, .22);
+            border-radius: 999px;
+            background: linear-gradient(100deg, #f6121d, #e50914 55%, #b20710);
+            color: #ffffff;
+            font: 800 .9rem "Inter", "Helvetica Neue", Arial, sans-serif;
+            letter-spacing: .02em;
+            cursor: pointer;
+            box-shadow: 0 10px 26px rgba(0, 0, 0, .5);
+            transition: background .15s ease, transform .15s ease;
+        }}
+        #mf-top-button:hover {{
+            background: linear-gradient(100deg, #ff2d3a, #f6121d 55%, #c00a12);
+            transform: translateY(-1px);
+        }}
+        #mf-top-button:active {{
+            transform: translateY(0);
+        }}
+        </style>
+        <div id="mf-top-slot-{movie_id}"></div>
+        <script>
+        // movie {movie_id}
+        (() => {{
+          const scroll = () => {{
+            const dialog = document.querySelector('[data-testid="stDialog"]');
+            if (!dialog) return;
+            for (const node of [dialog, ...dialog.querySelectorAll("*")]) {{
+              if (node.scrollHeight <= node.clientHeight) continue;
+              const overflow = window.getComputedStyle(node).overflowY;
+              if (overflow === "auto" || overflow === "scroll") {{
+                node.scrollTop = 0;
+              }}
+            }}
+          }};
+
+          const slot = document.getElementById("mf-top-slot-{movie_id}");
+          if (slot) {{
+            const button = document.createElement("button");
+            button.id = "mf-top-button";
+            button.type = "button";
+            button.textContent = "↑ Top";
+            button.dataset.movie = "{movie_id}";
+            button.setAttribute("aria-label", "Back to top");
+            button.addEventListener("click", scroll);
+            slot.appendChild(button);
+            window.__mfScrollRuns = (window.__mfScrollRuns || 0) + 1;
+            window.__mfScrollMovie = "{movie_id}";
+
+            const place = () => {{
+              const dialog = document.querySelector('[data-testid="stDialog"]');
+              if (!dialog) return;
+              const rect = dialog.getBoundingClientRect();
+              button.style.right =
+                Math.max(12, window.innerWidth - rect.right + 18) + "px";
+              button.style.bottom =
+                Math.max(12, window.innerHeight - rect.bottom + 18) + "px";
+            }};
+            place();
+            window.__mfPlaceTopButton = place;
+            if (!window.__mfTopResizeBound) {{
+              window.__mfTopResizeBound = true;
+              window.addEventListener("resize", () => {{
+                window.__mfPlaceTopButton?.();
+              }});
+            }}
+          }}
+
+          scroll();
+          requestAnimationFrame(scroll);
+          [60, 200, 500].forEach((ms) => setTimeout(scroll, ms));
+        }})();
+        </script>
+        """,
+        unsafe_allow_javascript=True,
+    )
+
+
 def movie_card(movie):
     title = escape(str(movie["title"]))
     genres = escape(str(movie["genres"]).replace("|", " · "))

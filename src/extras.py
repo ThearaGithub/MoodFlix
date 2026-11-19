@@ -15,15 +15,17 @@ from __future__ import annotations
 import html
 import json
 import os
+import queue
 import re
 import ssl
+import threading
 import time
 import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import certifi
@@ -714,9 +716,10 @@ def _score_trailer(video_title: str, movie_title: str, year: int | None) -> int:
     return score
 
 
-def _find_trailer(title: str, year: int | None) -> dict | None:
-    best: dict | None = None
-    best_score = -100
+def _trailer_queries(
+    title: str, year: int | None
+) -> list[tuple[str, str]]:
+    """Search phrases for the trailer, most specific first."""
     variants = _title_variants(title)[:2]
     queries = []
     for variant in variants:
@@ -728,32 +731,38 @@ def _find_trailer(title: str, year: int | None) -> dict | None:
         queries.append((variants[0], f"{variants[0]} {year} trailer"))
     else:
         queries.append((variants[0], f"{variants[0]} trailer"))
+    return queries[:3]
 
-    for variant, query in queries[:3]:
-        try:
-            videos = _bing_video_search(query)
-        except Exception:
-            videos = []
-        for video in videos:
-            score = _score_trailer(video["title"], variant, year)
-            if score > best_score:
-                best = video
-                best_score = score
-        if best_score >= 6:
-            break
 
-    # Bing's video results have become unreliable: for many queries it
-    # serves trending videos unrelated to the search, and even when the
-    # results do mention the movie they are usually shorts, explainers or
-    # reaction clips rather than a trailer. So "Bing returned *something*"
-    # is not evidence that no trailer exists -- only a result that actually
-    # scores as a trailer (>= 6) ends the search. Otherwise retry on
-    # YouTube, bounded by YOUTUBE_TOTAL_TIMEOUT; the whole lookup is then
-    # cached for 6 hours by get_movie_extras().
-    if best_score < 6:
-        for variant, query in queries[:2]:
+def _best_trailer(
+    searches: list[tuple[str, str, object]],
+    year: int | None,
+    timeout: float,
+) -> tuple[dict | None, int]:
+    """Run video searches at the same time and keep the best scored result.
+
+    Bing and YouTube are independent, so waiting for one before trying the
+    other just makes the dialog slower. Searches that have not started yet
+    are cancelled as soon as a result scores as a trailer.
+    """
+    best: dict | None = None
+    best_score = -100
+    if not searches:
+        return best, best_score
+
+    executor = ThreadPoolExecutor(max_workers=len(searches))
+    try:
+        futures = {
+            executor.submit(searcher, query): variant
+            for variant, query, searcher in searches
+        }
+        deadline = time.monotonic() + timeout
+        for future in as_completed(
+            futures, timeout=max(0.1, deadline - time.monotonic())
+        ):
+            variant = futures[future]
             try:
-                videos = _youtube_search(query)
+                videos = future.result()
             except Exception:
                 continue
             for video in videos:
@@ -763,6 +772,38 @@ def _find_trailer(title: str, year: int | None) -> dict | None:
                     best_score = score
             if best_score >= 6:
                 break
+    except Exception:
+        # A timed-out search still leaves any completed result usable.
+        pass
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+    return best, best_score
+
+
+def _find_trailer(title: str, year: int | None) -> dict | None:
+    queries = _trailer_queries(title, year)
+
+    # Round one runs both Bing queries and YouTube together. Bing is often
+    # fast but keeps serving unrelated trending videos; YouTube is slower
+    # but has the actual trailer. Running them side by side means a YouTube
+    # hit no longer waits behind every Bing attempt.
+    first = [
+        (variant, query, _bing_video_search)
+        for variant, query in queries[:2]
+    ]
+    first.append((queries[0][0], queries[0][1], _youtube_search))
+    best, best_score = _best_trailer(first, year, timeout=12)
+
+    # Round two only runs when nothing scored as a trailer. It is bounded so
+    # a search that hangs cannot keep the background loader alive forever.
+    if best_score < 6 and len(queries) > 1:
+        extra, extra_score = _best_trailer(
+            [(queries[1][0], queries[1][1], _youtube_search)],
+            year,
+            timeout=10,
+        )
+        if extra_score > best_score:
+            best, best_score = extra, extra_score
 
     if not best or best_score < 6:
         return None
@@ -1102,70 +1143,37 @@ def _wikipedia_description(article: str | None) -> str:
     return extract
 
 
-def _web_description(
+def _web_info(
     title: str, year: int | None, imdb_id: str
-) -> str:
-    article, _ = _wikidata_cast(imdb_id)
-    if not article:
-        article = _wikipedia_search(title, year)
-    return _wikipedia_description(article)
+) -> dict:
+    """Cast and plot from Wikidata/Wikipedia, without the slow trailer search.
 
-
-def _web_cast(
-    title: str, year: int | None, imdb_id: str
-) -> list[dict]:
+    The article is resolved once; the cast page and the plot summary are then
+    fetched at the same time because they are independent requests.
+    """
     article, wikidata_cast = _wikidata_cast(imdb_id)
     if not article:
         article = _wikipedia_search(title, year)
 
-    wikipedia_cast = _wikipedia_cast(article)
-    cast = wikipedia_cast or wikidata_cast
-    return _attach_photos(cast[:8])
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
-def _web_extras(
-    title: str, year: int | None, imdb_id: str
-) -> dict:
-    executor = ThreadPoolExecutor(max_workers=3)
-    cast_future = executor.submit(_web_cast, title, year, imdb_id)
-    trailer_future = executor.submit(_find_trailer, title, year)
-    description_future = executor.submit(
-        _web_description, title, year, imdb_id
-    )
-    deadline = time.monotonic() + 25
-
+    executor = ThreadPoolExecutor(max_workers=2)
+    cast_future = executor.submit(_wikipedia_cast, article)
+    overview_future = executor.submit(_wikipedia_description, article)
     try:
-        cast = cast_future.result(
-            timeout=max(0.1, deadline - time.monotonic())
-        )
+        wikipedia_cast = cast_future.result(timeout=15)
     except Exception:
-        cast = []
+        wikipedia_cast = []
     try:
-        trailer = trailer_future.result(
-            timeout=max(0.1, deadline - time.monotonic())
-        )
-    except Exception:
-        trailer = None
-    try:
-        overview = description_future.result(
-            timeout=max(0.1, deadline - time.monotonic())
-        )
+        overview = overview_future.result(timeout=15)
     except Exception:
         overview = ""
     finally:
-        # Never block the dialog on a slow background request.
         executor.shutdown(wait=False)
 
+    cast = wikipedia_cast or wikidata_cast
     return {
-        "cast": cast,
+        "cast": _attach_photos(cast[:8]),
         "overview": overview,
-        "trailer": trailer,
-        "watch": None,
+        "trailer": None,
         "source": "web",
     }
 
@@ -1181,56 +1189,197 @@ def _normalise_imdb_id(imdb_id) -> str:
     return ""
 
 
+_INFO_LOCK = threading.Lock()
+_INFO_FUTURES: dict[tuple, Future] = {}
+
+
+def _run_info(future: Future, key: tuple, args: tuple) -> None:
+    try:
+        future.set_result(get_movie_info(*args))
+    except BaseException as exc:  # pragma: no cover - defensive
+        future.set_exception(exc)
+    finally:
+        with _INFO_LOCK:
+            _INFO_FUTURES.pop(key, None)
+
+
+def movie_info_future(
+    tmdb_id: int | None, imdb_id: str, title: str, year: int | None
+) -> Future:
+    """Start (or join) a cast/plot lookup in the background.
+
+    The dialog blocks on ``.result()`` so the spinner is shown, while the
+    picks grid queues the same lookup to warm movies the user may click next.
+    Sharing the in-flight future avoids duplicating the same Wikipedia calls.
+    """
+    key = (tmdb_id, imdb_id, title, year)
+    with _INFO_LOCK:
+        future = _INFO_FUTURES.get(key)
+        if future is None:
+            future = Future()
+            _INFO_FUTURES[key] = future
+            threading.Thread(
+                target=_run_info,
+                args=(future, key, key),
+                name="mf-info",
+                daemon=True,
+            ).start()
+    return future
+
+
+# Prefetching runs on one low-priority worker: the picks are warmed in the
+# order they are shown, and a click is never stuck behind three parallel
+# lookups. Queued items only get a shared future when the worker reaches
+# them, so clicking one immediately starts it at full priority.
+_PREFETCH_QUEUE: queue.Queue = queue.Queue()
+_PREFETCH_LOCK = threading.Lock()
+_PREFETCH_QUEUED: set[tuple] = set()
+_PREFETCH_STARTED = False
+
+
+def _prefetch_worker() -> None:
+    while True:
+        args = _PREFETCH_QUEUE.get()
+        try:
+            movie_info_future(*args).result()
+        except Exception:
+            pass
+        finally:
+            with _PREFETCH_LOCK:
+                _PREFETCH_QUEUED.discard(args)
+            _PREFETCH_QUEUE.task_done()
+
+
+def prefetch_movie_info(
+    tmdb_id: int | None, imdb_id: str, title: str, year: int | None
+) -> None:
+    """Queue a cast/plot lookup for a movie the user may open next."""
+    global _PREFETCH_STARTED
+    key = (tmdb_id, imdb_id, title, year)
+    with _PREFETCH_LOCK:
+        if key in _PREFETCH_QUEUED:
+            return
+        _PREFETCH_QUEUED.add(key)
+        if not _PREFETCH_STARTED:
+            _PREFETCH_STARTED = True
+            threading.Thread(
+                target=_prefetch_worker,
+                name="mf-prefetch",
+                daemon=True,
+            ).start()
+    _PREFETCH_QUEUE.put(key)
+
+
+@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+def get_movie_info(
+    tmdb_id: int | None, imdb_id: str, title: str, year: int | None
+) -> dict:
+    """Return cast, plot and streaming offers as quickly as possible.
+
+    TMDB is tried first when credentials are configured. Without them the
+    keyless Wikipedia/Wikidata path supplies cast and plot. The slow trailer
+    search is deliberately *not* part of this call: ``get_movie_trailer()``
+    loads it separately so the dialog can paint the rest of the page first.
+
+    ``watch`` is always a dict shaped by ``_watch_providers()``, so the UI can
+    render a search fallback even when no TMDB credentials exist.
+    """
+    tmdb_extras = _tmdb_extras(tmdb_id)
+    web_info = None
+
+    if (
+        not tmdb_extras
+        or not tmdb_extras.get("cast")
+        or not tmdb_extras.get("overview")
+    ):
+        try:
+            web_info = _web_info(
+                title, year, _normalise_imdb_id(imdb_id)
+            )
+        except Exception:
+            web_info = None
+
+    if tmdb_extras:
+        if not tmdb_extras.get("cast") and web_info:
+            tmdb_extras["cast"] = web_info["cast"]
+        if not tmdb_extras.get("overview") and web_info:
+            tmdb_extras["overview"] = web_info.get("overview", "")
+        tmdb_extras.setdefault(
+            "watch", _watch_providers(None, _watch_region(), title, year)
+        )
+        return tmdb_extras
+
+    info = web_info or {
+        "cast": [],
+        "overview": "",
+        "trailer": None,
+        "source": "none",
+    }
+    info["watch"] = _watch_providers(None, _watch_region(), title, year)
+    return info
+
+
+@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+def get_movie_trailer(title: str, year: int | None) -> dict | None:
+    """Search Bing and YouTube for this movie's trailer."""
+    return _find_trailer(title, year)
+
+
+# A trailer lookup takes several seconds (mostly YouTube), so the dialog
+# starts it in a background thread and polls instead of blocking the run.
+_TRAILER_LOCK = threading.Lock()
+_TRAILER_RESULTS: dict[tuple[str, int | None], dict | None] = {}
+_TRAILER_LOADING: set[tuple[str, int | None]] = set()
+_MAX_TRAILER_RESULTS = 512
+
+
+def _load_trailer(key, title: str, year: int | None) -> None:
+    try:
+        trailer = get_movie_trailer(title, year)
+    except Exception:
+        trailer = None
+    with _TRAILER_LOCK:
+        _TRAILER_RESULTS[key] = trailer
+        _TRAILER_LOADING.discard(key)
+        while len(_TRAILER_RESULTS) > _MAX_TRAILER_RESULTS:
+            _TRAILER_RESULTS.pop(next(iter(_TRAILER_RESULTS)))
+
+
+def request_trailer(
+    title: str, year: int | None
+) -> tuple[dict | None, bool]:
+    """Return ``(trailer, ready)`` without ever blocking on the network.
+
+    The first call starts a background search; later calls report the result
+    once it is available. ``ready`` is False while the search is still
+    running, which lets the dialog show a placeholder and rerun itself.
+    """
+    key = (str(title), year)
+    with _TRAILER_LOCK:
+        if key in _TRAILER_RESULTS:
+            return _TRAILER_RESULTS[key], True
+        if key not in _TRAILER_LOADING:
+            _TRAILER_LOADING.add(key)
+            threading.Thread(
+                target=_load_trailer,
+                args=(key, str(title), year),
+                name="mf-trailer",
+                daemon=True,
+            ).start()
+    return None, False
+
+
 @st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
 def get_movie_extras(
     tmdb_id: int | None, imdb_id: str, title: str, year: int | None
 ) -> dict:
     """Return ``{"cast", "overview", "trailer", "watch", "source"}``.
 
-    TMDB is tried first when credentials are configured. Missing pieces are
-    filled from the keyless web fallback.
-
-    ``watch`` is always a dict shaped by ``_watch_providers()``, so the UI can
-    render a search fallback even when no TMDB credentials exist.
+    Kept for callers that want everything at once. The details dialog uses
+    ``get_movie_info()`` plus ``request_trailer()`` instead, so it never
+    waits for the slow trailer search.
     """
-    tmdb_extras = _tmdb_extras(tmdb_id)
-    web_extras = None
-
-    if (
-        not tmdb_extras
-        or not tmdb_extras.get("cast")
-        or not tmdb_extras.get("trailer")
-        or not tmdb_extras.get("overview")
-    ):
-        try:
-            web_extras = _web_extras(
-                title, year, _normalise_imdb_id(imdb_id)
-            )
-        except Exception:
-            web_extras = {
-                "cast": [],
-                "overview": "",
-                "trailer": None,
-                "source": "web",
-            }
-
-    if tmdb_extras:
-        if not tmdb_extras.get("cast") and web_extras:
-            tmdb_extras["cast"] = web_extras["cast"]
-        if not tmdb_extras.get("trailer") and web_extras:
-            tmdb_extras["trailer"] = web_extras["trailer"]
-        if not tmdb_extras.get("overview") and web_extras:
-            tmdb_extras["overview"] = web_extras.get("overview", "")
-        tmdb_extras.setdefault(
-            "watch", _watch_providers(None, _watch_region(), title, year)
-        )
-        return tmdb_extras
-
-    extras = web_extras or {
-        "cast": [],
-        "overview": "",
-        "trailer": None,
-        "source": "none",
-    }
-    extras["watch"] = _watch_providers(None, _watch_region(), title, year)
-    return extras
+    info = dict(get_movie_info(tmdb_id, imdb_id, title, year))
+    if not info.get("trailer"):
+        info["trailer"] = get_movie_trailer(title, year)
+    return info

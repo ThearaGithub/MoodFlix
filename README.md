@@ -16,7 +16,7 @@ MoodFlix learns from the movies you like, blends content similarity, rating qual
 - Trained latent-factor model (biased matrix factorisation / SVD) that supplies the personal match signal, evaluated on held-out ratings
 - Collaborative filtering from MovieLens ratings as the model's fallback
 - Case-insensitive search with poster grids, genre filters, and pagination
-- Click any poster to open a detail dialog with trailer, cast, poster, rating, genres, and tags
+- Click any poster or the Discover card to open a detail dialog with trailer, cast, poster, rating, genres, and tags
 - Trailer playback and top-billed cast with photos
 - "Where to watch" streaming logos (stream, free, rent, buy) with JustWatch links
 - Watchlist with CSV export
@@ -110,8 +110,8 @@ API key, and run:
 python scripts/fetch_posters.py
 ```
 
-Trailers and cast work without any key: the app searches Bing video
-results for a trailer and reads cast information from Wikipedia/Wikidata.
+Trailers and cast work without any key: the app searches Bing video and
+YouTube for a trailer and reads cast information from Wikipedia/Wikidata.
 Adding a TMDB key makes the lookups richer and faster — TMDB is used first,
 and the public sources fill in anything missing.
 
@@ -204,17 +204,23 @@ model picks that can be clicked through to their own details.
 
 Clicking a poster opens a dialog with the poster, a short plot description, the
 top-billed cast as photo cards, an embedded trailer, and a "You may like" row
-of four model picks. Lookups are cached for six hours per movie, so reopening
-the same title is instant.
+of four model picks. The plot and cast are cached for six hours per movie, so
+reopening the same title is instant. The trailer is searched in the background:
+the rest of the dialog is ready first, and the video appears when the search
+finishes. Cast and plot for the "You may like" posters are preloaded while the
+dialog is open, so clicking one usually opens it instantly. Clicking one of
+those picks switches the dialog to that movie and scrolls back up to its
+title; other same-movie actions, like adding to the watchlist, leave the
+dialog where it is. A floating **↑ Top** button returns to the movie title at
+any time.
 
 Descriptions come from TMDB when credentials exist and from the Wikipedia page
 summary otherwise. If neither is available the dialog says so instead of
 breaking.
 
 - With TMDB credentials, cast and trailers come from TMDB first.
-- Without credentials, the app falls back to Bing video search (which links to
-  YouTube trailers), retries YouTube search directly when Bing has no usable
-  result, and reads cast information from Wikipedia/Wikidata.
+- Without credentials, the app searches Bing video and YouTube at the same time
+  and reads cast information from Wikipedia/Wikidata.
 - If a trailer or cast list is unavailable, the dialog shows a friendly
   fallback instead of an error.
 - **Where to watch** groups providers into Stream, Free, Free with ads, Rent,

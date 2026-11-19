@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 
 import altair as alt
@@ -5,8 +6,13 @@ import pandas as pd
 import streamlit as st
 
 from src.data_loader import load_catalog, load_ratings
-from src.extras import get_movie_extras
+from src.extras import (
+    movie_info_future,
+    prefetch_movie_info,
+    request_trailer,
+)
 from src.model import (
+    get_model,
     model_metrics,
     ranking_scores,
     similarity_scores,
@@ -23,6 +29,7 @@ from src.ui import (
     movie_card,
     overview_block,
     poster_grid,
+    scroll_dialog_to_top,
     taste_meter,
     trailer_block,
     watch_providers_block,
@@ -67,6 +74,8 @@ if "mood" not in st.session_state:
     st.session_state.mood = "Happy"
 if "details_movie_id" not in st.session_state:
     st.session_state.details_movie_id = None
+if "prefetched_movies" not in st.session_state:
+    st.session_state.prefetched_movies = set()
 
 
 try:
@@ -80,9 +89,58 @@ except FileNotFoundError:
     st.stop()
 
 
+@st.cache_resource
+def warm_model():
+    """Train the latent model in the background at startup.
+
+    The first details dialog otherwise pays the ~2.5 s training time while
+    the user waits for the "You may like" grid.
+    """
+    threading.Thread(
+        target=get_model, name="mf-model", daemon=True
+    ).start()
+    return True
+
+
+warm_model()
+
+
 def movie_by_id(movie_id):
     match = catalog[catalog["movieId"] == movie_id]
     return match.iloc[0] if not match.empty else None
+
+
+def movie_extras_args(movie):
+    """The ``(tmdbId, imdbId, title, year)`` tuple used for extras lookups."""
+    year_value = movie.get("year")
+    year_value = (
+        int(year_value)
+        if year_value is not None and pd.notna(year_value)
+        else None
+    )
+    tmdb_value = movie.get("tmdbId")
+    tmdb_value = (
+        int(tmdb_value)
+        if tmdb_value is not None and pd.notna(tmdb_value)
+        else None
+    )
+    imdb_value = movie.get("imdbId")
+    imdb_value = (
+        str(imdb_value)
+        if imdb_value is not None and pd.notna(imdb_value)
+        else ""
+    )
+    return tmdb_value, imdb_value, str(movie.get("title", "")), year_value
+
+
+def prefetch_picks(picks):
+    """Warm the plot/cast cache for posters the user is likely to open."""
+    for _, movie in picks.iterrows():
+        movie_id = int(movie["movieId"])
+        if movie_id in st.session_state.prefetched_movies:
+            continue
+        st.session_state.prefetched_movies.add(movie_id)
+        prefetch_movie_info(*movie_extras_args(movie))
 
 
 def model_bar_chart(values, axis_title, zero, highlight):
@@ -182,46 +240,48 @@ def set_mood(mood):
     st.session_state.queue = []
 
 
-@st.dialog("Movie details", width="large")
+def close_movie_details():
+    """Forget the selected movie so a dismissed dialog stays closed."""
+    st.session_state.details_movie_id = None
+
+
+@st.fragment(run_every=1.0)
+def wait_for_trailer(title, year):
+    """Poll the background trailer search; rerun when it has an answer.
+
+    The trailer lookup is the slowest part of the details dialog (YouTube
+    regularly takes several seconds), so it runs in a daemon thread. This
+    one-second poll keeps the dialog responsive, and its app rerun swaps the
+    placeholder for the video once the search finishes.
+    """
+    _, ready = request_trailer(title, year)
+    if ready:
+        st.rerun()
+    st.caption("Searching YouTube… this usually takes a few seconds.")
+
+
+@st.dialog("Movie details", width="large", on_dismiss=close_movie_details)
 def show_movie_details():
-    # The dialog reads its movie from session state instead of an argument
-    # because a dialog cannot open another dialog: clicking a poster inside
-    # this one updates `details_movie_id` and the rerun renders that movie.
-    movie = movie_by_id(st.session_state.get("details_movie_id"))
+    # The movie comes from session state instead of an argument because a
+    # dialog cannot open another dialog: clicking a poster inside this one
+    # stores a new id and the dialog's fragment rerun renders that movie.
+    movie = movie_by_id(st.session_state.details_movie_id)
     if movie is None:
         st.caption("This movie is no longer available.")
         return
 
     movie_card(movie)
+    tmdb_value, imdb_value, title, year_value = movie_extras_args(movie)
 
-    year_value = movie.get("year")
-    year_value = (
-        int(year_value)
-        if year_value is not None and pd.notna(year_value)
-        else None
-    )
-    tmdb_value = movie.get("tmdbId")
-    tmdb_value = (
-        int(tmdb_value)
-        if tmdb_value is not None and pd.notna(tmdb_value)
-        else None
-    )
-    imdb_value = movie.get("imdbId")
-    imdb_value = (
-        str(imdb_value)
-        if imdb_value is not None and pd.notna(imdb_value)
-        else ""
-    )
+    # Plot and cast only: the slow trailer search is started separately below.
+    # The future is shared with the picks grid, so a prefetched movie opens
+    # without repeating the same Wikipedia requests.
+    with st.spinner("Loading plot and cast…"):
+        info = movie_info_future(
+            tmdb_value, imdb_value, title, year_value
+        ).result()
 
-    with st.spinner("Loading trailer and cast…"):
-        extras = get_movie_extras(
-            tmdb_value,
-            imdb_value,
-            str(movie.get("title", "")),
-            year_value,
-        )
-
-    overview_block(extras.get("overview"))
+    overview_block(info.get("overview"))
 
     match = taste_match(movie["movieId"], st.session_state.liked)
     if match is not None:
@@ -232,19 +292,30 @@ def show_movie_details():
 
     st.divider()
     st.subheader("Trailer")
-    trailer_block(extras.get("trailer"))
+    trailer = info.get("trailer")
+    if trailer is None:
+        trailer, trailer_ready = request_trailer(title, year_value)
+        if trailer_ready:
+            trailer_block(trailer)
+        else:
+            with st.container():
+                wait_for_trailer(title, year_value)
+    else:
+        trailer_block(trailer)
 
     st.subheader("Cast")
-    cast_grid(extras.get("cast") or [])
+    cast_grid(info.get("cast") or [])
 
-    source = extras.get("source")
-    if source == "TMDB":
-        st.caption("Trailer and cast via TMDB.")
-    elif source == "web":
+    if info.get("source") == "TMDB":
+        if info.get("trailer"):
+            st.caption("Trailer and cast via TMDB.")
+        else:
+            st.caption("Cast via TMDB · Trailer via YouTube.")
+    elif info.get("source") == "web":
         st.caption("Trailer via YouTube · Cast via Wikipedia/Wikidata.")
 
     st.subheader("Where to watch")
-    watch_providers_block(extras.get("watch"))
+    watch_providers_block(info.get("watch"))
 
     movie_id = int(movie["movieId"])
     if movie_id in st.session_state.watchlist:
@@ -272,24 +343,21 @@ def show_movie_details():
         poster_grid(
             picks,
             columns=4,
-            on_select=select_dialog_movie,
+            on_select=open_movie_details,
             key_prefix=f"dialog_{movie_id}",
         )
+        prefetch_picks(picks)
+
+    # Also adds the floating "↑ Top" button for long dialogs.
+    scroll_dialog_to_top(movie_id)
 
 
 def open_movie_details(movie):
-    """Open the details dialog for a poster clicked outside it."""
-    st.session_state.details_movie_id = int(movie["movieId"])
-    show_movie_details()
+    """Show the details dialog for a clicked poster.
 
-
-def select_dialog_movie(movie):
-    """Swap the already-open details dialog to the clicked movie.
-
-    Calling ``show_movie_details()`` here would raise
-    ``StreamlitInvalidLayoutContextError`` because dialogs cannot nest.
-    This runs as the poster button's ``on_click`` callback, so the id is
-    stored before the dialog's fragment reruns and renders the new movie.
+    Only the id is stored here; the dialog itself is opened at the bottom
+    of this script. A dialog created inside a widget callback is closed
+    again by the rerun that follows the callback.
     """
     st.session_state.details_movie_id = int(movie["movieId"])
 
@@ -351,6 +419,7 @@ if page == "Home":
                 on_select=open_movie_details,
                 key_prefix="maylike",
             )
+            prefetch_picks(picks)
 
 elif page == "Discover":
     st.title("Discover")
@@ -754,3 +823,9 @@ elif page == "About":
         "immediately, never uploaded or saved. It is a guess, not a diagnosis, "
         "and the manual mood buttons always override it."
     )
+
+
+# Opened during the normal script run, never inside a callback: a dialog
+# created in a callback is closed again by the rerun that follows it.
+if st.session_state.details_movie_id is not None:
+    show_movie_details()
