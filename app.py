@@ -14,6 +14,7 @@ from src.extras import (
 from src.model import (
     get_model,
     model_metrics,
+    predicted_rating,
     ranking_scores,
     similarity_scores,
     taste_match,
@@ -224,7 +225,9 @@ def may_like_picks(n=6, seed_movie_id=None):
         if st.session_state.liked
         else similarity_scores(catalog, seed_movie_id)
         if seed_movie_id is not None
-        else None
+        # No likes and no seed movie: the quality prior alone, so the row can
+        # show popular, well-rated starters instead of sitting empty.
+        else ranking_scores(catalog, [])
     )
     if scores is None:
         return None
@@ -324,6 +327,14 @@ def show_movie_details():
             match,
             f"Model taste match · {len(st.session_state.liked)} liked",
         )
+
+    estimate = predicted_rating(movie["movieId"], st.session_state.liked)
+    if estimate is not None:
+        if st.session_state.liked:
+            note = "taste-neighbour estimate, usually within about 0.8★"
+        else:
+            note = "community estimate — like movies in Discover for a personal one"
+        st.caption(f"★ Predicted rating: **{estimate:.1f}** · {note}")
 
     st.divider()
     st.subheader("Trailer")
@@ -433,28 +444,28 @@ if page == "Home":
 
     st.divider()
     st.subheader("You may like")
-    if not st.session_state.liked:
-        st.caption(
-            "Like a few movies in Discover and the recommendation model will "
-            "fill this row with movies that match your taste."
-        )
+    picks = may_like_picks(n=6)
+    if picks is None or picks.empty:
+        st.caption("The recommendation model is not available right now.")
     else:
-        picks = may_like_picks(n=6)
-        if picks is None or picks.empty:
-            st.caption("The recommendation model is not available right now.")
-        else:
+        if st.session_state.liked:
             st.caption(
                 "Picked by the recommendation model from the "
                 f"{len(st.session_state.liked)} movie"
                 f"{'s' if len(st.session_state.liked) != 1 else ''} you liked. "
                 "Click a poster for details."
             )
-            poster_grid(
-                picks,
-                on_select=open_movie_details,
-                key_prefix="maylike",
+        else:
+            st.caption(
+                "Popular, well-rated movies to start with. Like a few in "
+                "Discover and this row becomes personal."
             )
-            prefetch_picks(picks)
+        poster_grid(
+            picks,
+            on_select=open_movie_details,
+            key_prefix="maylike",
+        )
+        prefetch_picks(picks)
 
 elif page == "Discover":
     st.title("Discover")

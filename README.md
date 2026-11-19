@@ -190,17 +190,20 @@ always there.
 
 ## You May Like
 
-Once you have liked at least one movie, the **Home** page shows a "You may
-like" row: the six movies with the best combination of your latent taste match
-and rating quality. Before that, the row explains that liking a few movies in
-Discover will fill it. Clicking a poster opens the same details dialog.
+The **Home** page always shows a "You may like" row of six posters. Before your
+first like it lists popular, well-rated starters; after it, the movies with the
+best combination of your latent taste match and rating quality. Clicking a
+poster opens the same details dialog.
 
 ## Movie Details and Extras
 
 The dialog shows a plot description, a red **taste-match meter** for the model
-score (once you have liked something), the trailer, the cast, a **Where to
-watch** row of streaming-provider logos, and a **You may like** grid of four
-model picks that can be clicked through to their own details.
+score (once you have liked something), a **predicted rating** in stars, the
+trailer, the cast, a **Where to watch** row of streaming-provider logos, and a
+**You may like** grid of four model picks that can be clicked through to their
+own details. The predicted rating is a soft estimate — about 0.8 stars of
+average error — built from the MovieLens users who share your liked movies;
+before your first like it falls back to the movie's own rating bias.
 
 Clicking a poster opens a dialog with the poster, a short plot description, the
 top-billed cast as photo cards, an embedded trailer, and a "You may like" row
